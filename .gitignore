@@ -19,6 +19,9 @@ labs/ospf-baseline/stage5-preflight/
 labs/ospf-baseline/verification-results/
 review-results/
 
+# Raw diagnostic fixtures are intentionally not published in the source repo
+labs/ospf-baseline/tests/fixtures/
+
 # Locally generated review archives
 review-bundle*.zip
 v05-targeted-*-review.zip
