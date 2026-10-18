@@ -1,0 +1,24 @@
+.env
+.env.*
+!.env.example
+
+# Local Python environments and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Generated lab state and collected runtime evidence
+labs/ospf-baseline/clab-netsecops-ospf/
+labs/ospf-baseline/agent-runs/
+labs/ospf-baseline/experiments/
+labs/ospf-baseline/diagnostic-acceptance/
+labs/ospf-baseline/restart-verification/
+labs/ospf-baseline/stage5-r2-tests/
+labs/ospf-baseline/stage5-preflight/
+labs/ospf-baseline/verification-results/
+review-results/
+
+# Locally generated review archives
+review-bundle*.zip
+v05-targeted-*-review.zip
