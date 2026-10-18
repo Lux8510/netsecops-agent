@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "frozen_at_utc": "2026-10-13T16:16:38+00:00",
+  "purpose": "r2 held-out validation after r1 development",
+  "source_sha256": {
+    "collect_evidence.py": "a01ba95f7e888ffbf850a2397b68e09694bd5efde9a58a015d17b681ac74840b",
+    "agent_tools.py": "2347ec3012016be83287b1212672757af78fba947d584fdba7785e51c735ae03",
+    "agent_loop.py": "4d504efe5c197e6ec073e1b6fb8186fef84be22feca9793d2d103a5fed52dfaa",
+    "deepseek_client.py": "a40b01a6c84148d249e719262c4ead8f56a5191ef54cfe3c3a46ca79a56cf154",
+    "diagnose_offline.py": "90c25e77913f18106f33f8e55d42aa14d4295928c091207917913f27e77eddd8",
+    "judge_agent_trace.py": "9f5cd17f04a770fdb475cff7daf58a2c1e7df0d4bb1954546762c926d13db5cc",
+    "run_fault_scenario.py": "75ffbcfad946d3e4a6352fea9abf6fd6b2187cfe36cfa74fea1d65949eadc9bd",
+    "run_stage5_r2.py": "1104fb877fd84d1a6623a92ef4bf48954134fee685af0078d47a25946d6c126c",
+    "run_stage5_acceptance.py": "65a3c7828c572cbd4515b1c8523e1a917da8ac62f8a05566267bc587f958e260",
+    "../../agent-settings.json": "2c2801d20d4a350f1c3efcd0f461f243512603bd553301ecbaceb81e89376910"
+  },
+  "criteria": [
+    "direct root-cause citation",
+    "same frozen observations for rules and Agent",
+    "model tool_calls equal executed calls",
+    "limits unchanged",
+    "recovery verified"
+  ]
+}

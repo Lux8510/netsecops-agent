@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "version": "v0.2-reliability",
+  "frozen_at_utc": "2026-10-14T01:59:47+00:00",
+  "purpose": "offline reliability repair after immutable v0.1 acceptance",
+  "source_sha256": {
+    "collect_evidence.py": "89c15a064f072dec8ab5e3673b06b14a4013a0e0e41f2ed468b877b686e5036f",
+    "agent_tools.py": "f5dd7a38b6d88e902e3c1c2ea9539d1c4877b74bbcd1408cc28ca6a868df083e",
+    "agent_loop.py": "2f6016aa8b2764fd10745e86fb2c36c3ca28fe369ff8d8eab4f343c6a3103a76",
+    "deepseek_client.py": "a40b01a6c84148d249e719262c4ead8f56a5191ef54cfe3c3a46ca79a56cf154",
+    "diagnose_offline.py": "eb52ac462b0c7dc897b3dedf20cef181322592cf859a9cf4840833dcb0465f3d",
+    "judge_agent_trace.py": "9b1f72f532b9be17cb206cdfe027e207ea3c8f52cb52a2550af2702d27a84ad3",
+    "run_fault_scenario.py": "3c2c2d3daa53a5f6d8a502cfaa496b8b71e0deb753cc1a16473b71fccc6fe5ff",
+    "run_stage5_r2.py": "436cda070498b7d6b354b8320ad81de0683c23300d55a448e0bc3e356debf879",
+    "run_stage5_acceptance.py": "e1809e891c966db24a82db95dbe710462a85792cd03deabbcd6ec2fbe58bf286",
+    "reliability_freeze.py": "e1cfc4b0982009f69a150434f26b226e132454e680dd0165d04cbf2b29a99a8a",
+    "../../agent-settings.json": "2c2801d20d4a350f1c3efcd0f461f243512603bd553301ecbaceb81e89376910"
+  },
+  "tests_sha256": {
+    "tests/fixtures/configs/r1-startup-frr.conf": "270eac87d158b2b3ca0c91facbba322ba608456acf848e0425c85abe2992647f",
+    "tests/fixtures/configs/r2-startup-frr.conf": "555c7ee94defbccbaab3052bc41a60f29f87c21d1a122d563e11923a6bc2c577",
+    "tests/fixtures/observations/area-fault.json": "5854e33b26a72bdf228ba00b814c97289cd11431b02f640b72b74605719e397c",
+    "tests/fixtures/observations/failed-command.json": "6a171e07f86fd16c4d0f6a948b7c25623b5930a66c88bea25abf5f4d418b31bb",
+    "tests/fixtures/observations/missing-one-area.json": "bba23b0bbaac24415587504ee11082efee68f0fd7aaf6a4b3c9fd28b6fd7ada3",
+    "tests/fixtures/observations/normal.json": "b7ea0124122815e4a2d97ff741626241e5916388bb0892c541b1a86b5220e473",
+    "tests/fixtures/observations/recovered.json": "8f4aa3a3d95d335af344efb421fa22ee5024c7f7519a46d3b478f7a41d389ea7",
+    "tests/fixtures/observations/stage5-case-01.json": "2afd8254834ef05d3121db80c566905195e46db5a9521463bbc281ae63c1fd7b",
+    "tests/fixtures/observations/stage5-case-02.json": "9c5e088b717f272a3a940f2ac1120f5675f06971f61310447f2ff8fc3f90108b",
+    "tests/fixtures/observations/stage5-case-03.json": "bcad8b11946942c1f082c1ce13005512c9d060a1c09ae77af4dd0c95f1aafee7",
+    "tests/fixtures/README.md": "07817fe45d80d1cb9e41bf933dea914f418315e161027f004400a5f6821c2a6f",
+    "tests/fixtures/traces/normal.json": "f181342b019363bc8203d0e4687e7802f878450d242dcd13158d3511ef7f20b6",
+    "tests/fixtures/traces/stage5-case-01.json": "d3d96dd686b92a0904beeda3f2e0918b3293b61246f745ca938a22dfe0c2e514",
+    "tests/fixtures/traces/stage5-case-02.json": "2db42233240e36a73d09b4ad39cff9b1ed3474cb71caf1f4399c69bf704458b8",
+    "tests/fixtures/traces/stage5-case-03.json": "074dc4fa180c32eaef94688dfa1fe9374052b0e2f766bb717911518fec6dfe44",
+    "tests/mock_signal_child.py": "225e16cb0f65142e92c99896e19be0eef9ad62083100395f47abd51eb36cbdb5",
+    "tests/test_agent_config.py": "fc3d15540aa84d29a4397687098b81abb6affa15342edc5a823af816344ce7f2",
+    "tests/test_agent_runtime.py": "84a3b1199df380c85ac0a5b51c6773b1543d66bcad66ec7ee603a812417cdbd0",
+    "tests/test_diagnose_offline.py": "d5c2daf2cb3d96a127eccdb1452aa6955c97cb7fdb83e5a9d2990a07bd0cada6",
+    "tests/test_judge_agent_trace.py": "a7cece8ac933b3e5fb58d180c73094c2e5dc1d37389d783dc83b180c87041eb3",
+    "tests/test_phase2.py": "962a1dd0ec88f118b3d05ff45b36e8122a3a168ad4217d27790caa0bf66738c6",
+    "tests/test_reliability.py": "9079c6425f22818c7df042929cb9cdd8b505dc5f7c26c0ea25ab47218fe546bb",
+    "tests/test_stage5.py": "f1c5c0615bd98decd7aaeeb74c49b3fb1c16c212a9f699f4da515994468d24cb"
+  },
+  "historical_sha256": {
+    "stage5-freeze.json": "d722469dcbbc79da8aacafe11d16185a6224c13bcc38287172ab112cf37c377d",
+    "agent-runs/stage5-acceptance-20261013T162832Z-db38a0f7/acceptance.json": "e343a6cd1a4a027dbbe045458c447e17ca462dfdcc2662ebf642baa2b41f96c3"
+  },
+  "offline_validation": {
+    "result": "review-results/v0.2-offline-20261014T015728Z/result.json",
+    "sha256": "b975206fea623b5e9fb538c98f51946477824d943d940672a1bccaf89c3868f0",
+    "tests_run": 54,
+    "skipped": 0,
+    "wsl_sigterm_test": "SEE_TEST_OUTPUT"
+  },
+  "validation_scope": "offline tests only; no v0.2 real-model or live-fault acceptance yet"
+}

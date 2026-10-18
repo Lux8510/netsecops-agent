@@ -1,0 +1,11 @@
+{
+  "model": "deepseek-flash",
+  "base_url": "https://api.deepseek.com",
+  "max_rounds": 8,
+  "max_tool_calls": 12,
+  "max_tokens": 700,
+  "request_timeout_seconds": 30,
+  "command_timeout_seconds": 12,
+  "total_timeout_seconds": 180,
+  "max_retries": 2
+}
