@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "version": "v0.7-progress",
+  "scope": "optional Agent events and local mock SSE progress",
+  "python_clean_copy": {
+    "tested_at_utc": "2026-10-27T17:55:24+00:00",
+    "platform": "linux",
+    "python_version": "3.12.3",
+    "source_files": 66,
+    "tests_run": 77,
+    "skipped": 0,
+    "status": "PASS"
+  },
+  "frontend": {
+    "tests_run": 7,
+    "typecheck": "PASS",
+    "production_build": "PASS"
+  },
+  "browser_mock_sse": {
+    "status": "PASS",
+    "screenshot": "docs/images/progress-v07.png",
+    "screenshot_sha256": "26e24cceabdb3a5e25d5dffa403540178df5b211e612472874590d678439e8e4"
+  },
+  "real_model_sse": "NOT_RUN",
+  "live_network": "NOT_RUN",
+  "github_actions": "NOT_RUN; changes not pushed"
+}

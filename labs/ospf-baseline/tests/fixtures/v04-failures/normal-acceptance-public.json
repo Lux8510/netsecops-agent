@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "redacted_historical_verdict_extract",
+  "source_case": "v0.3 normal-live acceptance failure, 2026-10-14",
+  "normal_judge": {
+    "verdict": "FAIL",
+    "problems": ["Original model final omitted the already collected topology evidence citation."]
+  },
+  "redactions": ["Absolute workstation and run paths omitted; this is not a full acceptance record."]
+}

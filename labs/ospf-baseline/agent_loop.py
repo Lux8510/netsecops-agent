@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from copy import deepcopy
 import json
 import re
 import time
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from agent_config import AgentSettings
 from agent_tools import AgentTools, tool_schemas
@@ -242,7 +243,7 @@ def incomplete(reason: str, tools: AgentTools) -> dict[str, Any]:
 
 
 def run_agent(task: str, model: ChatModel, tools: AgentTools, settings: AgentSettings,
-              *, mode: str) -> dict[str, Any]:
+              *, mode: str, on_event: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
     started = time.monotonic()
     deadline = started + settings.total_timeout_seconds
     initial = {"lab": tools.layout.lab_name, "nodes": list(tools.layout.nodes),
@@ -282,7 +283,19 @@ def run_agent(task: str, model: ChatModel, tools: AgentTools, settings: AgentSet
                              "usage_total": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
                                              "requests_with_usage": 0},
                              "model_raw_final": None, "final": None, "guardrail_changes": [], "error": None}
+
+    def emit(kind: str, **details: Any) -> None:
+        if on_event is None:
+            return
+        event = {"schema_version": 1, "kind": kind, "at_utc": utc_now(), **details}
+        try:
+            # A presentation callback cannot mutate evidence or change diagnosis.
+            on_event(deepcopy(event))
+        except Exception:
+            trace["event_delivery_errors"] = trace.get("event_delivery_errors", 0) + 1
+
     try:
+        emit("started", mode=mode, model=settings.model, initial_topology=initial)
         for round_number in range(1, settings.max_rounds + 1):
             if time.monotonic() >= deadline:
                 trace["final"] = incomplete("诊断总超时。", tools)
@@ -308,6 +321,9 @@ def run_agent(task: str, model: ChatModel, tools: AgentTools, settings: AgentSet
                                            "model_message": message, "tool_results": [], "usage": usage}
             trace["rounds"].append(round_trace)
             calls = message.get("tool_calls") or []
+            emit("model_response", round=round_number,
+                 model=response.get("model"), finish_reason=response.get("finish_reason"),
+                 usage=usage, tool_calls=deepcopy(calls) if isinstance(calls, list) else None)
             if not calls:
                 if response.get("finish_reason") == "length":
                     trace["final"] = incomplete("模型输出达到 max_tokens，上下文不完整。", tools)
@@ -348,6 +364,8 @@ def run_agent(task: str, model: ChatModel, tools: AgentTools, settings: AgentSet
                         limit_hit = True
                 round_trace["tool_results"].append({"tool_call_id": call["id"], "name": name,
                                                     "arguments": arguments, "result": result})
+                emit("tool_result", round=round_number, tool_call_id=call["id"],
+                     name=name, arguments=arguments, result=result)
                 model_result = result
                 if name == "query_topology" and result.get("status") == "ok":
                     # Keep full raw configs in trace; the model needs only the requested topology data.
@@ -386,6 +404,7 @@ def run_agent(task: str, model: ChatModel, tools: AgentTools, settings: AgentSet
         trace["elapsed_seconds"] = round(time.monotonic() - started, 3)
         trace["evidence"] = tools.evidence
         trace["evidence_additions"] = (trace.get("final") or {}).get("evidence_additions") or []
+        emit("completed", trace=trace)
     return trace
 
 

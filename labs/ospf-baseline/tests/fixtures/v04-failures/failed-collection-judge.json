@@ -1,0 +1,172 @@
+{
+  "verdict": "FAIL",
+  "expected": "collection_failure",
+  "actual": "insufficient_evidence",
+  "model_raw_status": "ospf_area_mismatch",
+  "post_validation_changed_status": true,
+  "problems": [
+    "Final status 'insufficient_evidence' differs from 'collection_failure'",
+    "No cited failed OSPF interface collection"
+  ],
+  "model": "deepseek-flash",
+  "model_requests": 6,
+  "tool_calls": 10,
+  "elapsed_seconds": 9.802,
+  "input_tokens": 23432,
+  "output_tokens": 1306,
+  "total_tokens": 24738,
+  "area_facts_cited": {
+    "r1": "0.0.0.1"
+  },
+  "tool_sequence": [
+    {
+      "round": 1,
+      "name": "query_topology",
+      "arguments": {},
+      "evidence_id": "E001",
+      "status": "ok"
+    },
+    {
+      "round": 2,
+      "name": "query_ospf_interface",
+      "arguments": {
+        "node": "r1",
+        "interface": "eth1"
+      },
+      "evidence_id": "E002",
+      "status": "ok"
+    },
+    {
+      "round": 2,
+      "name": "query_ospf_interface",
+      "arguments": {
+        "node": "r2",
+        "interface": "eth1"
+      },
+      "evidence_id": "E003",
+      "status": "collection_failed"
+    },
+    {
+      "round": 3,
+      "name": "query_interface",
+      "arguments": {
+        "node": "r2",
+        "interface": "eth1"
+      },
+      "evidence_id": "E004",
+      "status": "ok"
+    },
+    {
+      "round": 3,
+      "name": "query_neighbors",
+      "arguments": {
+        "node": "r1"
+      },
+      "evidence_id": "E005",
+      "status": "ok"
+    },
+    {
+      "round": 3,
+      "name": "query_neighbors",
+      "arguments": {
+        "node": "r2"
+      },
+      "evidence_id": "E006",
+      "status": "ok"
+    },
+    {
+      "round": 4,
+      "name": "query_interface_config",
+      "arguments": {
+        "node": "r1",
+        "interface": "eth1"
+      },
+      "evidence_id": "E007",
+      "status": "ok"
+    },
+    {
+      "round": 4,
+      "name": "query_interface_config",
+      "arguments": {
+        "node": "r2",
+        "interface": "eth1"
+      },
+      "evidence_id": "E008",
+      "status": "ok"
+    },
+    {
+      "round": 5,
+      "name": "query_routes",
+      "arguments": {
+        "node": "r1",
+        "scope": "ospf"
+      },
+      "evidence_id": "E009",
+      "status": "ok"
+    },
+    {
+      "round": 5,
+      "name": "query_routes",
+      "arguments": {
+        "node": "r2",
+        "scope": "ospf"
+      },
+      "evidence_id": "E010",
+      "status": "ok"
+    }
+  ],
+  "cited_evidence_ids": [
+    "E001",
+    "E002",
+    "E004",
+    "E005",
+    "E006",
+    "E007",
+    "E008",
+    "E009",
+    "E010"
+  ],
+  "admin_facts_cited": [],
+  "passive_facts_cited": [],
+  "guardrail_changes": [
+    {
+      "field": "status",
+      "model_value": "ospf_area_mismatch",
+      "final_value": "insufficient_evidence",
+      "reason": "证据引用和直接根因条件校验"
+    },
+    {
+      "field": "conclusion",
+      "model_value": "r1 与 r2 的互联接口处于不同的 OSPF 区域：r1 eth1 配置为 ip ospf area 0.0.0.1（E007），r2 eth1 配置为 ip ospf area 0.0.0.0（E008）。两端接口均管理 UP（E004），互联接口均未被配置为 passive（E007、E008 仅显示 router ospf，无 ip ospf passive）。因此两端无法建立邻接，r1 与 r2 的 OSPF 邻居表均为空（E005、E006），OSPF 路由表也为空（E009、E010）。区域不一致是导致邻居无法建立与双向 Loopback 不通的根因。",
+      "final_value": "证据不足，不能确认网络根因。",
+      "reason": "证据引用和直接根因条件校验"
+    },
+    {
+      "field": "missing_information",
+      "model_value": "r2 的互联接口 OSPF 运行状态查询（show ip ospf interface eth1）执行失败（E003，collection_failed），无法直接读取 r2 eth1 的 OSPF Area 运行态；但 r2 的有效运行配置已明确给出 ip ospf area 0.0.0.0，足以确认区域不一致。r2 侧 OSPF 接口运行态缺失，属采集失败而非网络故障。",
+      "final_value": [
+        "r2 的互联接口 OSPF 运行状态查询（show ip ospf interface eth1）执行失败（E003，collection_failed），无法直接读取 r2 eth1 的 OSPF Area 运行态；但 r2 的有效运行配置已明确给出 ip ospf area 0.0.0.0，足以确认区域不一致。r2 侧 OSPF 接口运行态缺失，属采集失败而非网络故障。",
+        "缺少两端互联接口的有效且不同的 OSPF Area 原始证据。"
+      ],
+      "reason": "证据引用和直接根因条件校验"
+    },
+    {
+      "field": "repair_suggestion",
+      "model_value": "将两端的互联接口放入同一 OSPF 区域以修正不一致，例如在 r2 eth1 上将 ip ospf area 0.0.0.0 改为 ip ospf area 0.0.0.1（或反向统一到 0.0.0.0），使 r1 与 r2 的 eth1 处于同一 Area；随后确认邻居达到 FULL，并确认各节点 OSPF 路由表出现对端 Loopback（10.255.0.1/32、10.255.0.2/32）及双向 Loopback ping 正常。以上仅为只读观测得到的建议，不在本流程执行。",
+      "final_value": "先只读核实两端接口状态、OSPF Area/passive 配置和采集错误；根因未确认前不要修改配置。",
+      "reason": "证据引用和直接根因条件校验"
+    },
+    {
+      "field": "observed_facts",
+      "model_value": null,
+      "final_value": [],
+      "reason": "证据引用和直接根因条件校验"
+    },
+    {
+      "field": "inferred_impacts",
+      "model_value": null,
+      "final_value": [],
+      "reason": "证据引用和直接根因条件校验"
+    }
+  ]
+}

@@ -28,6 +28,10 @@ def copy_source(destination: Path) -> int:
     paths.extend((lab_dir / "configs").rglob("frr.conf"))
     paths.extend((lab_dir / "tests").glob("*.py"))
     paths.extend((lab_dir / "tests/fixtures").rglob("*"))
+    # Keep the historical extract untouched locally, but do not copy its
+    # personal workstation paths into a redistributable clean test tree.
+    private_extract = lab_dir / "tests/fixtures/v04-failures/normal-acceptance.json"
+    paths = [path for path in paths if path != private_extract]
     files = sorted({path for path in paths if path.is_file()})
     for path in files:
         relative = path.relative_to(ROOT)

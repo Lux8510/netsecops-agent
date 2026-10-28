@@ -45,7 +45,7 @@ def with_revalidated_final(trace: dict, tools: AgentTools) -> dict:
 class RealFailureEvidenceRegression(unittest.TestCase):
     def test_real_normal_missing_topology_citation_is_proven_and_added(self):
         trace = sample("normal-trace.json")
-        self.assertEqual(sample("normal-acceptance.json")["normal_judge"]["verdict"], "FAIL")
+        self.assertEqual(sample("normal-acceptance-public.json")["normal_judge"]["verdict"], "FAIL")
         raw_ids = deepcopy(trace["model_raw_final"]["evidence_ids"])
         tools = replay_tools(trace, "normal.json")
         repaired = with_revalidated_final(trace, tools)

@@ -1,11 +1,71 @@
 # NetSecOps Agent
 
-第一阶段建立双路由器 OSPF 实验基线；第二阶段加入可控的 OSPF 区域不一致故障实验与数据采集；第三阶段加入重启恢复验收和离线规则诊断。当前不包含大模型、Agent 框架或生产网络接入。
+具有证据校验和过程可视化的**只读网络故障诊断 Agent**。单个 DeepSeek Agent 在双 FRR 路由器 OSPF 实验中自主选择受限只读工具；每次调用保存原始观测与运行内 `evidence_id`，确定性保护层再核对根因依据和修复对象。网页默认回放保存轨迹，不调用模型、不执行命令，也不需要 API Key。v0.7 另提供可选的本机事件服务；项目不是自动修复系统或生产网络诊断服务。
+
+![实际运行的 NetSecOps 回放工作台：模型原始误判区域不一致，系统校验为采集失败](docs/images/workbench-v06.png)
+
+截图来自本地实际启动的 v0.6 保存轨迹工作台，展示[关键命令采集失败案例](examples/cases/collection-failure.json)回放结束后的首屏；不是实时网络或新模型调用。v0.7 的可选事件面板不会改变这份历史截图。
+
+## 立即体验（无密钥、无 Docker）
+
+先克隆或下载本仓库，在项目根目录执行：
+
+```bash
+cd web
+npm ci
+npm run dev
+```
+
+打开终端给出的 `http://127.0.0.1:5173/`（端口若被占用，以终端实际地址为准）。需要 Node.js 22 或兼容版本。网页默认只读取 [`examples/`](examples/README.md) 的五个保存案例。可选的离线验证：
+
+```bash
+python3 run_clean_offline_tests_v06.py
+cd web
+npm run check
+```
+
+v0.6 纯标准库离线入口仍可运行原有 72 项测试。v0.7 事件服务测试需要下节列出的隔离 Python 依赖；Ubuntu/WSL2 干净副本 **77 项通过、0 跳过**，前端 **7 项测试通过**，类型检查和生产构建通过。干净副本不含 `.env`、历史运行目录或容器生成状态。v0.6 的[原始验证记录](docs/VALIDATION_v0.6.md)保持不变；v0.7 结果见[事件流验证记录](docs/VALIDATION_v0.7.md)。GitHub Actions 配置在 [offline.yml](.github/workflows/offline.yml)；本轮未推送，远端 CI 尚未运行。
+
+## 可选：本机诊断事件流（v0.7）
+
+保持上面的网页开发服务运行，在另一个终端、**项目根目录**创建隔离环境并启动本机服务：
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-progress.txt
+.venv/bin/python labs/ospf-baseline/progress_api.py
+```
+
+Windows PowerShell 将 `.venv/bin/python` 换为 `.venv\Scripts\python.exe`。网页展开“本次诊断事件流”，点击“运行 mock 事件演示”。默认服务只用固定测试观测和脚本化 mock 模型，调用的仍是现有 `run_agent()` 与保护层；**此演示不计入真实模型验收，也不产生 Token 用量**。服务只绑定 `127.0.0.1:8000`；网页通过 Vite 的 `/api` 代理连接。事件中的工具结果、`evidence_id` 与最终轨迹可下载核对，服务内存最多保留 8 次已完成运行。
+
+安装上述依赖后，可用 `.venv/bin/python run_clean_offline_tests_v07.py` 从不含密钥和历史运行目录的临时副本执行全部 77 项 Python 测试。
+
+现场按钮只有在 Ubuntu/WSL2 以 `--enable-live` 显式启动服务、项目密钥已配置时才显示；它会调用 DeepSeek 和现有只读 LiveBackend，并沿用 `agent-settings.json` 限制。**本轮没有执行该路径**。网页不接收密钥、任务文本、命令或文件路径；现场运行若需长期保存，应下载本次 `trace.json`。当前 Vite 代理固定使用服务的默认 8000 端口。
+
+## 三分钟看什么
+
+1. 选“正常基线”，逐步播放：`E001` 拓扑、两端 Area、双向邻居/路由/ping 都出现后，才显示 `normal`。
+2. 选“OSPF 区域不一致”，观察 r1/r2 的实际 Area；页面只说两端不同，不猜错误端。再看“互联接口管理关闭”的直接 FRR 状态证据。
+3. 选“关键命令采集失败”：模型原始结论为区域不一致，保护层改为 `collection_failure` 并补引失败的 `E003`；“缺少一端 Area 证据”则为 `insufficient_evidence`。
+
+操作稿见 [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)。点击时间线或最终证据 ID 可看命令、退出码、stdout/stderr；单次工具耗时未记录时页面明确写“未记录”。
+
+## 架构与信任边界
+
+[`agent_loop.py`](labs/ospf-baseline/agent_loop.py) 接收模型 API 的 `tool_calls` 并执行 [`agent_tools.py`](labs/ospf-baseline/agent_tools.py) 的参数受限工具；[`collect_evidence.py`](labs/ospf-baseline/collect_evidence.py) 只允许固定只读命令。保存的轨迹包含模型原始诊断、保护后结论、证据补引和逐轮工具结果。[`web/src/trace.ts`](web/src/trace.ts) 是统一的只读轨迹解析/转换层，拒绝未知 schema、跨案例证据与模型调用/实际结果不匹配；[`web/src/App.tsx`](web/src/App.tsx) 只按当前播放位置显示已获得观测。可选的 [`progress_api.py`](labs/ospf-baseline/progress_api.py) 只把相同调用循环的事件送到本机浏览器，不提供 shell、路径读取或配置写入 API。更完整的代码关系见 [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)。
+
+五个案例是**选择性导出的历史保存记录**：一例为当时现场只读诊断，四例为模型查询冻结观测的回放；不是合成现场，也不是当前实时网络。原始完整运行历史仍在本地忽略目录，未整体发布。可提交的测试 fixtures 有独立[来源说明](labs/ospf-baseline/tests/fixtures/README.md)，含个人路径的旧验收摘录没有发布。历史 v0.5 单次真实模型定向验收为前三例 PASS、动态成功重采路径 `NOT_EXERCISED`、总体 `INCOMPLETE`；不能把本轮网页测试或少量案例称为通用准确率。
+
+已实现：三类受控 OSPF 根因的直接证据校验、采集失败/证据不足保护、离线规则比较基线、五例无密钥可视回放，以及可选事件回调与本机 SSE mock 演示。待验证：网页触发的真实 DeepSeek 现场诊断。待实现：普通 Linux 现场模式、模型/规则成本与效果比较、动态成功重采真实模型补验、更多拓扑与故障。当前现场 `LiveBackend` 仍限定 Ubuntu/WSL2；任何路径都不会自动修复。
+
+---
+
+以下保留项目早期分阶段记录，描述对应时期的环境与验收；上面的 v0.6 首页是当前启动与展示入口。
 
 ## 工作区与环境基线
 
-- Windows 工作区：`C:\Users\Administrator\Documents\Codex\2026-10-12\windows-agent-1-windows-wsl-linux`
-- 项目目录：`C:\Users\Administrator\Documents\Codex\2026-10-12\windows-agent-1-windows-wsl-linux\netsecops-agent`
+- Windows 工作区：当时为用户自选的 Windows 目录；本仓库不依赖该绝对路径。
+- 项目目录：本仓库根目录。
 - 当前 Codex 命令环境：Windows PowerShell 7.6.5（原生 Windows 沙盒）
 - Git 状态：当前工作区不是 Git 仓库；本阶段未执行 `git init`
 - Windows Git：2.53.0.windows.3
@@ -53,7 +113,7 @@ r1 eth1 (10.0.12.1/30) -------- (10.0.12.2/30) eth1 r2
 从 Ubuntu/WSL2 执行：
 
 ```bash
-bash /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/deploy-and-verify.sh
+bash labs/ospf-baseline/deploy-and-verify.sh
 ```
 
 脚本会：
@@ -68,13 +128,13 @@ bash /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windo
 脚本不会销毁实验。需要查看状态时可手动执行：
 
 ```bash
-sudo containerlab inspect -t /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/topology.clab.yml
+sudo containerlab inspect -t labs/ospf-baseline/topology.clab.yml
 ```
 
 只有在明确决定销毁时，才手动执行以下命令（本阶段不会自动执行）：
 
 ```bash
-sudo containerlab destroy -t /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/topology.clab.yml
+sudo containerlab destroy -t labs/ospf-baseline/topology.clab.yml
 ```
 
 ## 实际验证结果
@@ -112,7 +172,7 @@ sudo containerlab destroy -t /mnt/c/Users/Administrator/Documents/Codex/2026-10-
 在已有 Ubuntu/WSL2 中运行以下命令。脚本只对现有两台运行中的实验容器操作；如果容器不存在、镜像不符或正常基线未通过，会在注入前停止。
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/run_area_mismatch.py
+python3 labs/ospf-baseline/run_area_mismatch.py
 ```
 
 脚本在开始时调用 `sudo -v`，可能要求输入 Ubuntu 用户密码。一次完整运行会先采集正常证据，从拓扑和两端的实际运行配置识别互联接口、地址、OSPF 区域、配置模式与远端 Loopback；随后仅把第一台路由器的互联区域临时改到另一不同区域。它兼容已发现的进程级 `network … area …` 和接口级 `ip ospf area …` 两种模式，不混用两种语法。故障与恢复轮询各有 90 秒上限。脚本在 `finally` 中按原模式恢复区域，再核对运行配置、启动配置文件哈希、OSPF 邻居、路由和双向 ping。它不执行 `write memory`、`containerlab save`、重建或销毁。
@@ -120,7 +180,7 @@ python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-wi
 也可以单独采集一份只读快照，`--output` 必须是尚不存在的目录：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/collect_evidence.py --output /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/experiments/manual-check-001
+python3 labs/ospf-baseline/collect_evidence.py --output labs/ospf-baseline/experiments/manual-check-001
 ```
 
 采集器仅执行固定的只读命令白名单：`show running-config`、接口地址/链路状态、互联接口的 FRR/OSPF 状态、OSPF 邻居、路由表，以及互联地址和远端 Loopback ping。命令使用参数数组调用，不通过 shell 拼接。每条命令在 JSON 中记录节点、实际参数、采集时间、退出码、标准输出、错误输出和执行错误；同目录另存原始 `.stdout.txt`、`.stderr.txt`。
@@ -179,7 +239,7 @@ sudo docker exec clab-netsecops-ospf-r1 vtysh -c 'configure terminal' -c 'interf
 在 Ubuntu/WSL2 执行：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/verify_restart.py
+python3 labs/ospf-baseline/verify_restart.py
 ```
 
 脚本先检查已有实验是否健康，使用 `docker inspect` 核实两台 FRR 容器的 `/etc/frr` 实际挂载来源，并保存配置原件。随后只用 Containerlab 的节点级 `restart --node r1 --node r2` 重启这两台路由器，不重启 Docker、WSL、Windows，也不销毁或重建实验。若首次重启失败，它只在严格确认“旧生成配置导致的特定路由回归”且配置文件未被并发更改时，才将本项目正确源配置复制到两份生成 `frr.conf`，再重启相同节点；否则停止并保留证据。每次只读轮询上限 90 秒。
@@ -191,9 +251,9 @@ python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-wi
 仅提供一个采集器保存的 `observations.json`，另指定一个尚不存在的输出目录，例如：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/diagnose_offline.py \
-  --input /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/experiments/area-mismatch-20261013T072913Z-a2e17eda/observations/fault/snapshot/observations.json \
-  --output-dir /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/diagnostic-acceptance/manual-example-001
+python3 labs/ospf-baseline/diagnose_offline.py \
+  --input labs/ospf-baseline/tests/fixtures/observations/area-fault.json \
+  --output-dir labs/ospf-baseline/diagnostic-acceptance/manual-example-001
 ```
 
 输出为 `diagnosis.json` 与中文 `report.zh-CN.md`。示例结论为 `ospf_area_mismatch`；报告同时引用 r1 `eth1` 的 `Area 0.0.0.1` 和 r2 `eth1` 的 `Area 0.0.0.0`，并附邻居、路由、ping 症状。诊断代码只接收观测 JSON，不读取 `experiment-record/`、预期根因或输入目录名；目录路径仅用于打开指定观测文件和保存报告。邻居消失、路由缺失或 ping 失败不能单独证明区域不一致。命令执行失败会得到 `collection_failure`，区域字段缺失或证据矛盾会得到 `insufficient_evidence`。修复建议只写在报告中，不执行配置变更。
@@ -203,7 +263,7 @@ python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-wi
 本地脚本检查：
 
 ```bash
-python3 -B -m unittest discover -s /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/tests -q
+python3 -B -m unittest discover -s labs/ospf-baseline/tests -q
 ```
 
 本次在 Windows Python 运行共 **15 项通过**。旧实验的离线诊断验收记录在 `diagnostic-acceptance/acceptance-20261013T080150Z-99df4320/`，共六组：正常→`normal`、区域故障→`ospf_area_mismatch`、恢复→`normal`、缺少一端区域→`insufficient_evidence`、关键采集命令失败→`collection_failure`、仅有邻居/路由/ping 症状→`insufficient_evidence`；**六组均通过**。各组的输入、副本诊断 JSON、中文报告与总表均保留。这是当前单一拓扑和故障规则的验收，不是通用诊断准确率。
@@ -211,8 +271,8 @@ python3 -B -m unittest discover -s /mnt/c/Users/Administrator/Documents/Codex/20
 对任意新完成的同结构实验，可只用其三组观测再次验收：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/run_diagnosis_acceptance.py \
-  --experiment-dir /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/experiments/area-mismatch-20261013T081041Z-3fbfc8c4
+python3 labs/ospf-baseline/run_diagnosis_acceptance.py \
+  --experiment-dir '<local-experiment-dir>'
 ```
 
 ### 新一轮故障实验与最终网络状态
@@ -237,7 +297,7 @@ python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-wi
 
 六个只读工具为 `query_topology`、`query_interface`、`query_ospf_interface`、`query_neighbors`、`query_routes`、`ping_address`。节点、互联接口、路由范围与 ping 目标都限制在本实验拓扑；底层只有 `collect_evidence.py` 的固定命令模板，无任意 shell 或配置写入入口。每次工具返回分配 `E001` 等 evidence_id，原始命令、输出、退出码和错误保存在 `trace.json`。回放只打开指定的单份观测 JSON，不把实验目录名、故障记录或规则诊断答案传给模型。最终 OSPF 区域不一致结论必须引用两端互联接口不同 Area 的原始证据；正常结论还要求双向 FULL 邻居、远端 OSPF 路由和 Loopback ping。证据缺失、命令失败或到达上限不能伪报成功。
 
-本地配置文件是 `C:\Users\Administrator\Documents\Codex\2026-10-12\windows-agent-1-windows-wsl-linux\netsecops-agent\.env`，字段为 `DEEPSEEK_API_KEY=`；也可使用当前进程同名环境变量，环境变量优先。程序实际加载此文件，绝不输出密钥。`.env.example` 只有空占位符，`.gitignore` 排除 `.env` 和其他本地环境文件。当前项目尚不是 Git 仓库，因此当前没有 Git 跟踪记录；将来若初始化仓库，该忽略规则会生效。上述配置只作用于本项目，不改变 Codex 应用模型或执行环境。`agent-settings.json` 设定模型和调用限制：最多 8 轮、12 次工具调用、每次输出最多 700 tokens、单次请求 30 秒、单条命令 12 秒、整个诊断 180 秒、最多 2 次重试。只有网络/服务端错误重试；认证、余额、限流和其他 4xx 错误立即停止。
+本地配置文件是项目根目录的 `.env`，字段为 `DEEPSEEK_API_KEY=`；也可使用当前进程同名环境变量，环境变量优先。真实密钥不得提交；`.env.example` 只有空占位符，`.gitignore` 排除 `.env`。此配置只作用于本项目，不改变 Codex 应用模型或执行环境。`agent-settings.json` 设定模型和调用限制：最多 8 轮、12 次工具调用、每次输出最多 700 tokens、单次请求 30 秒、单条命令 12 秒、整个诊断 180 秒、最多 2 次重试。只有网络/服务端错误重试；认证、余额、限流和其他 4xx 错误立即停止。
 
 回放可在 Windows PowerShell 运行；现场 Docker 工具只在 Ubuntu/WSL2 可用。以下示例使用 Windows PowerShell，路径保持在当前 Windows 工作区：
 
@@ -245,7 +305,7 @@ python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-wi
 python -B .\netsecops-agent\labs\ospf-baseline\agent_cli.py --mode replay --observations .\netsecops-agent\labs\ospf-baseline\experiments\area-mismatch-20261013T081041Z-3fbfc8c4\observations\normal\observations.json --run-label normal --task "检查 r1 到 r2 Loopback 的连通性并解释异常原因。请自行选择必要的只读工具，在调用上限内优先核对 OSPF 区域、邻居、远端路由和双向 Loopback ping；不必检查与结论无关的接口。"
 ```
 
-将 `normal/observations.json` 换成 `fault/snapshot/observations.json` 即可回放故障。现场模式入口为在 Ubuntu/WSL2 运行 `python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/agent_cli.py --mode live`；它只查询现有 r1/r2 容器。输出自动保存到 `labs/ospf-baseline/agent-runs/<标签>-<时间>-<随机号>/trace.json` 和 `report.zh-CN.md`。`trace.json` 包含模型逐轮消息、所选工具、每次工具返回及原始证据、最终结论、耗时、每次请求与累计 token 用量；不含 API Key。
+将 `normal/observations.json` 换成 `fault/snapshot/observations.json` 即可回放故障。现场模式入口为在 Ubuntu/WSL2、项目根目录运行 `python3 labs/ospf-baseline/agent_cli.py --mode live`；它只查询现有 r1/r2 容器。输出自动保存到 `labs/ospf-baseline/agent-runs/<标签>-<时间>-<随机号>/trace.json` 和 `report.zh-CN.md`。`trace.json` 包含模型逐轮消息、所选工具、每次工具返回及原始证据、最终结论、耗时、每次请求与累计 token 用量；不含 API Key。网页演示不运行这个入口。
 
 ### 验收记录
 
@@ -284,7 +344,7 @@ python -B .\netsecops-agent\labs\ospf-baseline\agent_cli.py --mode replay --obse
 在 Ubuntu/WSL2 运行以下入口，先做当前正常现场 Agent 诊断；若模型 API 没有认证、余额或持续接口错误，再由现有实验脚本检查基线、注入同一故障，故障稳定后运行只读现场 Agent，最后无论 Agent 成败都尝试恢复原配置，并轮询核验邻居、远端路由、互联及 Loopback 双向 ping：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/run_live_agent_acceptance.py
+python3 labs/ospf-baseline/run_live_agent_acceptance.py
 ```
 
 脚本不销毁容器、不保存故障为启动配置；如恢复检查失败，以输出的 `Experiment` 路径查看 `comparison.md` 与 `experiment-record/experiment-record.json` 内按实际接口和原区域生成的手动恢复步骤。不得将 `acceptance.json` 的总状态当作网络状态；必须单独查看 `Final network: RESTORED`。两次现场 Agent 只使用六个只读工具，不接触实验注入记录或预期根因。
@@ -311,7 +371,7 @@ DeepSeek 官方依据：[Tool Calls](https://api-docs.deepseek.com/guides/tool_c
 新的受控入口为 `labs/ospf-baseline/run_fault_scenario.py`：`--fault` 只能选 `area_mismatch`、`admin_down`、`ospf_passive`，`--target` 只能选 `r1` 或 `r2`。例如在 Ubuntu/WSL2 运行：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/run_fault_scenario.py --fault ospf_passive --target r1
+python3 labs/ospf-baseline/run_fault_scenario.py --fault ospf_passive --target r1
 ```
 
 每次脚本先检查原网络健康、容器身份和 FRR 版本，保存目标路由器的运行配置和原有启动文件哈希；只注入一种运行时故障。故障稳定后采集独立快照。配置命令部分失败、轮询或采集异常也会进入 `finally` 恢复；恢复后比较完整运行配置与原快照、启动文件哈希，并检查两端邻居 FULL、远端 /32 OSPF 路由、互联地址和 Loopback 双向 ping。`experiment-record/` 保存故障名称、操作和手工恢复命令，诊断工具仅读取 `observations/` 中的原始观测。若恢复失败，脚本返回 FAIL 和 `Final network: NOT VERIFIED`，应先阅读该次 `comparison.md` 和独立实验记录，不要继续注入新故障。
@@ -327,8 +387,8 @@ r1 开发验证的三次新实验分别在 `experiments/admin_down-r1-20261013T1
 真实 DeepSeek 验收在 Ubuntu/WSL2 执行（批次文件中的实验路径采用 `/mnt/c/...`）：
 
 ```bash
-python3 /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/run_stage5_acceptance.py \
-  --batch /mnt/c/Users/Administrator/Documents/Codex/2026-10-12/windows-agent-1-windows-wsl-linux/netsecops-agent/labs/ospf-baseline/stage5-r2-tests/batch-20261013T161857Z-72f15a49/batch.json
+python3 labs/ospf-baseline/run_stage5_acceptance.py \
+  --batch '<local-stage5-batch.json>'
 ```
 
 统一验收记录在 `labs/ospf-baseline/agent-runs/stage5-acceptance-20261013T162832Z-db38a0f7/acceptance.md` 与相邻 JSON，状态 **PASS**。三组均用同一任务描述，规则和模型读取每个 `case-0N/observations.json` 的同一冻结哈希；独立评判逐轮验证实际工具名称与参数确实来自 DeepSeek 返回的 `tool_calls`，所有最终引用的 evidence_id 均存在且支持结论。实际数据如下：

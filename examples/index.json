@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "collection": "v0.6-demo-examples",
+  "built_at_utc": "2026-10-27T07:10:56+00:00",
+  "cases": [
+    {
+      "id": "normal",
+      "title": "正常基线",
+      "provenance": "历史现场只读诊断",
+      "run_mode": "live",
+      "started_at_utc": "2026-10-14T11:33:17+00:00",
+      "path": "cases/normal.json",
+      "source_label": "v0.5 定向验收 case-01"
+    },
+    {
+      "id": "area-mismatch",
+      "title": "OSPF 区域不一致",
+      "provenance": "历史冻结观测回放",
+      "run_mode": "replay",
+      "started_at_utc": "2026-10-13T16:28:32+00:00",
+      "path": "cases/area-mismatch.json",
+      "source_label": "Stage 5 历史回放 case-01"
+    },
+    {
+      "id": "admin-down",
+      "title": "互联接口管理关闭",
+      "provenance": "历史冻结观测回放",
+      "run_mode": "replay",
+      "started_at_utc": "2026-10-13T16:28:38+00:00",
+      "path": "cases/admin-down.json",
+      "source_label": "Stage 5 历史回放 case-02"
+    },
+    {
+      "id": "collection-failure",
+      "title": "关键命令采集失败",
+      "provenance": "历史冻结观测回放",
+      "run_mode": "replay",
+      "started_at_utc": "2026-10-14T11:33:24+00:00",
+      "path": "cases/collection-failure.json",
+      "source_label": "v0.5 定向验收 case-02"
+    },
+    {
+      "id": "missing-area",
+      "title": "缺少一端 Area 证据",
+      "provenance": "历史冻结观测回放",
+      "run_mode": "replay",
+      "started_at_utc": "2026-10-14T11:33:35+00:00",
+      "path": "cases/missing-area.json",
+      "source_label": "v0.5 定向验收 case-03"
+    }
+  ]
+}

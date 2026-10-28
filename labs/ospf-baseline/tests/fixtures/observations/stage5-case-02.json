@@ -1,0 +1,498 @@
+{
+  "schema_version": 1,
+  "collected_at_utc": "2026-10-13T16:20:13+00:00",
+  "lab": "netsecops-ospf",
+  "nodes": {
+    "r1": {
+      "commands": [
+        {
+          "node": "r1",
+          "id": "running_config",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "vtysh",
+            "-c",
+            "show running-config"
+          ],
+          "started_at_utc": "2026-10-13T16:20:13+00:00",
+          "ended_at_utc": "2026-10-13T16:20:13+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "Building configuration...\n\nCurrent configuration:\n!\nfrr version 10.7.1_git\nfrr defaults traditional\nhostname r1\ndomainname localdomain\nlog stdout\nservice integrated-vtysh-config\n!\ninterface eth1\n description r1-to-r2\n ip address 10.0.12.1/30\n ip ospf area 0.0.0.0\n ip ospf network point-to-point\nexit\n!\ninterface lo\n ip address 10.255.0.1/32\n ip ospf area 0.0.0.0\n ip ospf passive\nexit\n!\nrouter ospf\n ospf router-id 10.255.0.1\nexit\n!\nend\n",
+          "stderr": "",
+          "stdout_file": "r1__running_config.stdout.txt",
+          "stderr_file": "r1__running_config.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "interfaces_ipv4",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "ip",
+            "-br",
+            "-4",
+            "addr"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "lo               UNKNOWN        127.0.0.1/8 10.255.0.1/32 \neth0@if10        UP             172.20.20.3/24 \neth1@if7         DOWN           10.0.12.1/30 \n",
+          "stderr": "",
+          "stdout_file": "r1__interfaces_ipv4.stdout.txt",
+          "stderr_file": "r1__interfaces_ipv4.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "interconnect_link",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "ip",
+            "-s",
+            "link",
+            "show",
+            "dev",
+            "eth1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "8: eth1@if7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 9500 qdisc noqueue state DOWN mode DEFAULT group default \n    link/ether aa:c1:ab:2e:93:d4 brd ff:ff:ff:ff:ff:ff link-netnsid 3\n    RX:  bytes packets errors dropped  missed   mcast           \n        472838    5651      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n        475352    5688      0       7       0       0 \n    altname clab-o-045ec1bad251fbd0\n",
+          "stderr": "",
+          "stdout_file": "r1__interconnect_link.stdout.txt",
+          "stderr_file": "r1__interconnect_link.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "frr_interface",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "vtysh",
+            "-c",
+            "show interface eth1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "Interface eth1 is up, line protocol is down\n  Link ups:       2    last: 2026/10/13 15:55:50.35\n  Link downs:     3    last: 2026/10/13 16:20:11.64\n  Total Carrier Changes: 9\n  vrf: default\n  Description: r1-to-r2\n  index 8 metric 0 mtu 9500 speed 10000 txqlen 0\n  flags: <UP,BROADCAST,MULTICAST>\n  MPLS  Not specified by CLI\n  Multicast config is Not specified by CLI\n  Shutdown config is Disabled by CLI\n  Type: Ethernet\n  HWaddr: aa:c1:ab:2e:93:d4\n  inet 10.0.12.1/30\n  inet6 fe80::a8c1:abff:fe2e:93d4/64\n  Interface Type VETH\n  Interface Slave Type None\n  protodown: off \n  Parent ifindex: 7\n",
+          "stderr": "",
+          "stdout_file": "r1__frr_interface.stdout.txt",
+          "stderr_file": "r1__frr_interface.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "ospf_interface",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "vtysh",
+            "-c",
+            "show ip ospf interface eth1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "eth1 is down\n  ifindex 8, MTU 9500 bytes, BW 10000 Mbit <UP,BROADCAST,MULTICAST>\n  OSPF not enabled on this interface\n\n",
+          "stderr": "",
+          "stdout_file": "r1__ospf_interface.stdout.txt",
+          "stderr_file": "r1__ospf_interface.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "ospf_neighbors",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "vtysh",
+            "-c",
+            "show ip ospf neighbor"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "\nNeighbor ID     Pri State           Up Time         Dead Time Address         Interface                        RXmtL RqstL DBsmL\n\n",
+          "stderr": "",
+          "stdout_file": "r1__ospf_neighbors.stdout.txt",
+          "stderr_file": "r1__ospf_neighbors.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "routes",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "vtysh",
+            "-c",
+            "show ip route"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "Codes: K - kernel route, C - connected, L - local, S - static,\n       R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,\n       T - Table, v - VNC, V - VNC-Direct, A - Babel, F - PBR,\n       f - OpenFabric, t - Table-Direct,\n       > - selected route, * - FIB route, q - queued, r - rejected, b - backup\n       t - trapped, o - offload failure\n\nIPv4 unicast VRF default:\nL * 10.255.0.1/32 is directly connected, lo, weight 1, 07:39:26\nC>* 10.255.0.1/32 is directly connected, lo, weight 1, 07:39:26\nC>* 172.20.20.0/24 is directly connected, eth0, weight 1, 07:39:26\nL>* 172.20.20.3/32 is directly connected, eth0, weight 1, 07:39:26\n",
+          "stderr": "",
+          "stdout_file": "r1__routes.stdout.txt",
+          "stderr_file": "r1__routes.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "ospf_routes",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "vtysh",
+            "-c",
+            "show ip route ospf"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "",
+          "stderr": "",
+          "stdout_file": "r1__ospf_routes.stdout.txt",
+          "stderr_file": "r1__ospf_routes.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "ping_peer_link",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "ping",
+            "-c",
+            "2",
+            "-W",
+            "1",
+            "10.0.12.2"
+          ],
+          "started_at_utc": "2026-10-13T16:20:14+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 1,
+          "error": null,
+          "stdout": "PING 10.0.12.2 (10.0.12.2): 56 data bytes\n\n--- 10.0.12.2 ping statistics ---\n2 packets transmitted, 0 packets received, 100% packet loss\n",
+          "stderr": "",
+          "stdout_file": "r1__ping_peer_link.stdout.txt",
+          "stderr_file": "r1__ping_peer_link.stderr.txt"
+        },
+        {
+          "node": "r1",
+          "id": "ping_remote_loopback",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r1",
+            "ping",
+            "-c",
+            "2",
+            "-W",
+            "1",
+            "10.255.0.2"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 1,
+          "error": null,
+          "stdout": "PING 10.255.0.2 (10.255.0.2): 56 data bytes\n",
+          "stderr": "ping: sendto: Network unreachable\n",
+          "stdout_file": "r1__ping_remote_loopback.stdout.txt",
+          "stderr_file": "r1__ping_remote_loopback.stderr.txt"
+        }
+      ]
+    },
+    "r2": {
+      "commands": [
+        {
+          "node": "r2",
+          "id": "running_config",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "vtysh",
+            "-c",
+            "show running-config"
+          ],
+          "started_at_utc": "2026-10-13T16:20:13+00:00",
+          "ended_at_utc": "2026-10-13T16:20:14+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "Building configuration...\n\nCurrent configuration:\n!\nfrr version 10.7.1_git\nfrr defaults traditional\nhostname r2\ndomainname localdomain\nlog stdout\nservice integrated-vtysh-config\n!\ninterface eth1\n description r2-to-r1\n ip address 10.0.12.2/30\n ip ospf area 0.0.0.0\n ip ospf network point-to-point\n shutdown\nexit\n!\ninterface lo\n ip address 10.255.0.2/32\n ip ospf area 0.0.0.0\n ip ospf passive\nexit\n!\nrouter ospf\n ospf router-id 10.255.0.2\nexit\n!\nend\n",
+          "stderr": "",
+          "stdout_file": "r2__running_config.stdout.txt",
+          "stderr_file": "r2__running_config.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "interfaces_ipv4",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "ip",
+            "-br",
+            "-4",
+            "addr"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "lo               UNKNOWN        127.0.0.1/8 10.255.0.2/32 \neth0@if12        UP             172.20.20.2/24 \neth1@if8         DOWN           10.0.12.2/30 \n",
+          "stderr": "",
+          "stdout_file": "r2__interfaces_ipv4.stdout.txt",
+          "stderr_file": "r2__interfaces_ipv4.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "interconnect_link",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "ip",
+            "-s",
+            "link",
+            "show",
+            "dev",
+            "eth1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "7: eth1@if8: <BROADCAST,MULTICAST> mtu 9500 qdisc noqueue state DOWN mode DEFAULT group default \n    link/ether aa:c1:ab:64:0f:94 brd ff:ff:ff:ff:ff:ff link-netnsid 1\n    RX:  bytes packets errors dropped  missed   mcast           \n        475352    5688      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n        472838    5651      0       8       0       0 \n    altname clab-o-c562dad456c4f054\n",
+          "stderr": "",
+          "stdout_file": "r2__interconnect_link.stdout.txt",
+          "stderr_file": "r2__interconnect_link.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "frr_interface",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "vtysh",
+            "-c",
+            "show interface eth1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "Interface eth1 is down\n  Link ups:       1    last: 2026/10/13 15:55:50.35\n  Link downs:     2    last: 2026/10/13 16:20:11.64\n  Total Carrier Changes: 9\n  vrf: default\n  Description: r2-to-r1\n  index 7 metric 0 mtu 9500 speed 10000 txqlen 0\n  flags: <BROADCAST,MULTICAST>\n  MPLS  Not specified by CLI\n  Multicast config is Not specified by CLI\n  Shutdown config is Enabled by CLI\n  Type: Ethernet\n  HWaddr: aa:c1:ab:64:0f:94\n  inet 10.0.12.2/30\n  Interface Type VETH\n  Interface Slave Type None\n  protodown: off \n  Parent ifindex: 8\n",
+          "stderr": "",
+          "stdout_file": "r2__frr_interface.stdout.txt",
+          "stderr_file": "r2__frr_interface.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "ospf_interface",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "vtysh",
+            "-c",
+            "show ip ospf interface eth1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "eth1 is down\n  ifindex 7, MTU 9500 bytes, BW 10000 Mbit <BROADCAST,MULTICAST>\n  OSPF not enabled on this interface\n\n",
+          "stderr": "",
+          "stdout_file": "r2__ospf_interface.stdout.txt",
+          "stderr_file": "r2__ospf_interface.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "ospf_neighbors",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "vtysh",
+            "-c",
+            "show ip ospf neighbor"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "\nNeighbor ID     Pri State           Up Time         Dead Time Address         Interface                        RXmtL RqstL DBsmL\n\n",
+          "stderr": "",
+          "stdout_file": "r2__ospf_neighbors.stdout.txt",
+          "stderr_file": "r2__ospf_neighbors.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "routes",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "vtysh",
+            "-c",
+            "show ip route"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "Codes: K - kernel route, C - connected, L - local, S - static,\n       R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,\n       T - Table, v - VNC, V - VNC-Direct, A - Babel, F - PBR,\n       f - OpenFabric, t - Table-Direct,\n       > - selected route, * - FIB route, q - queued, r - rejected, b - backup\n       t - trapped, o - offload failure\n\nIPv4 unicast VRF default:\nL * 10.255.0.2/32 is directly connected, lo, weight 1, 07:39:27\nC>* 10.255.0.2/32 is directly connected, lo, weight 1, 07:39:27\nC>* 172.20.20.0/24 is directly connected, eth0, weight 1, 07:39:27\nL>* 172.20.20.2/32 is directly connected, eth0, weight 1, 07:39:27\n",
+          "stderr": "",
+          "stdout_file": "r2__routes.stdout.txt",
+          "stderr_file": "r2__routes.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "ospf_routes",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "vtysh",
+            "-c",
+            "show ip route ospf"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 0,
+          "error": null,
+          "stdout": "",
+          "stderr": "",
+          "stdout_file": "r2__ospf_routes.stdout.txt",
+          "stderr_file": "r2__ospf_routes.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "ping_peer_link",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "ping",
+            "-c",
+            "2",
+            "-W",
+            "1",
+            "10.0.12.1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 1,
+          "error": null,
+          "stdout": "PING 10.0.12.1 (10.0.12.1): 56 data bytes\n",
+          "stderr": "ping: sendto: Network unreachable\n",
+          "stdout_file": "r2__ping_peer_link.stdout.txt",
+          "stderr_file": "r2__ping_peer_link.stderr.txt"
+        },
+        {
+          "node": "r2",
+          "id": "ping_remote_loopback",
+          "command": [
+            "sudo",
+            "-n",
+            "docker",
+            "exec",
+            "clab-netsecops-ospf-r2",
+            "ping",
+            "-c",
+            "2",
+            "-W",
+            "1",
+            "10.255.0.1"
+          ],
+          "started_at_utc": "2026-10-13T16:20:16+00:00",
+          "ended_at_utc": "2026-10-13T16:20:16+00:00",
+          "exit_code": 1,
+          "error": null,
+          "stdout": "PING 10.255.0.1 (10.255.0.1): 56 data bytes\n",
+          "stderr": "ping: sendto: Network unreachable\n",
+          "stdout_file": "r2__ping_remote_loopback.stdout.txt",
+          "stderr_file": "r2__ping_remote_loopback.stderr.txt"
+        }
+      ]
+    }
+  },
+  "discovery_error": null,
+  "discovered": {
+    "r1": {
+      "link_interface": "eth1",
+      "link_address": "10.0.12.1",
+      "link_prefix": "10.0.12.0/30",
+      "link_area": "0.0.0.0",
+      "ospf_mode": "interface",
+      "loopback_address": "10.255.0.1",
+      "loopback_prefix": "10.255.0.1/32",
+      "router_id": "10.255.0.1"
+    },
+    "r2": {
+      "link_interface": "eth1",
+      "link_address": "10.0.12.2",
+      "link_prefix": "10.0.12.0/30",
+      "link_area": "0.0.0.0",
+      "ospf_mode": "interface",
+      "loopback_address": "10.255.0.2",
+      "loopback_prefix": "10.255.0.2/32",
+      "router_id": "10.255.0.2"
+    }
+  }
+}

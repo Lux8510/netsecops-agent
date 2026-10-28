@@ -19,8 +19,16 @@ labs/ospf-baseline/stage5-preflight/
 labs/ospf-baseline/verification-results/
 review-results/
 
-# Raw diagnostic fixtures are intentionally not published in the source repo
-labs/ospf-baseline/tests/fixtures/
+# Small, reviewed regression fixtures are published for offline reproducibility.
+# The untouched v0.3 acceptance extract below contains a personal workstation path;
+# tests use a separately redacted verdict extract instead.
+labs/ospf-baseline/tests/fixtures/v04-failures/normal-acceptance.json
+
+# Local front-end output and tooling caches
+web/node_modules/
+web/dist/
+web/playwright-report/
+web/test-results/
 
 # Locally generated review archives
 review-bundle*.zip

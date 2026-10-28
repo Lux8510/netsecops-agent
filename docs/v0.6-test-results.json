@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "version": "v0.6-demo",
+  "scope": "offline source and saved-trace workbench",
+  "python_clean_copy": {
+    "tested_at_utc": "2026-10-27T07:34:26+00:00",
+    "platform": "linux",
+    "python_version": "3.12.3",
+    "source_files": 63,
+    "tests_run": 72,
+    "skipped": 0,
+    "exit_code": 0,
+    "status": "PASS"
+  },
+  "frontend": {
+    "tests_run": 7,
+    "failed": 0,
+    "typecheck": "PASS",
+    "production_build": "PASS"
+  },
+  "browser": {
+    "status": "PASS",
+    "details": "docs/VALIDATION_v0.6.md",
+    "screenshot": "docs/images/workbench-v06.png"
+  },
+  "github_actions": "NOT_RUN; repository changes have not been pushed",
+  "model_api": "NOT_RUN",
+  "live_network_lab": "NOT_RUN"
+}

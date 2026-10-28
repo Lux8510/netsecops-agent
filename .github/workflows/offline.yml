@@ -1,0 +1,33 @@
+name: Offline regression and replay workbench
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install bounded local progress API test dependencies
+        run: python3 -m pip install -r requirements-progress.txt
+      - name: Credential-free Python tests in a clean source copy
+        run: python3 run_clean_offline_tests_v07.py
+      - name: Check selected publication files and documentation links
+        run: python3 tools/check_publication.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install front-end dependencies
+        working-directory: web
+        run: npm ci
+      - name: Type check, unit tests and build
+        working-directory: web
+        run: npm run check
