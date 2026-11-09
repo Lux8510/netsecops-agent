@@ -16,7 +16,7 @@
 | 保留在主线 | `labs/ospf-baseline/`（Agent 核心）、`v1/`（新拓扑）、`web/`、`examples/`、`docs/` 的概览与验证记录 |
 | 归档到 `history/` | v0.1–v0.5 审查指南、修复说明、打包脚本、旧测试入口、旧版 README 日志 |
 | 新增 | `Makefile`、`run_offline_tests.py`、`DECISIONS.md`、重写 `README.md` |
-| 修正 | `requirements-progress.txt` 固定了不存在的版本；CI 入口 |
+| 修正 | CI 入口与文档链接（依赖版本经 CI 日志核对后保持原样） |
 | 暂不处理 | `labs/` 内部的历史验收脚本（见"待决"） |
 
 ## 逐项说明
@@ -34,27 +34,11 @@
 风险：历史版本的入口不再在根目录，但 `history/` 内脚本仍在，且旧结论以文档形式保留。
 如果审查认为需要保留可执行的历史入口，可再补一个 `make test-v06`。
 
-### `requirements-progress.txt` 修正
+### `requirements-progress.txt`：核对后**未改动**
 
-原内容：
+最初怀疑固定版本不存在，按本地镜像给出的列表判断为"无效版本"。随后用 GitHub Actions 的真实安装日志核对：`fastapi==0.162.0`、`uvicorn==0.54.0` 均可正常解析安装，main 分支此前的 CI 也是通过的。
 
-```text
-fastapi==0.162.0
-uvicorn==0.54.0
-```
-
-这两个版本在公开 PyPI 上不存在（截至核对：fastapi 最新 0.128.8，uvicorn 最新 0.39.0）。
-后果：GitHub Actions 的 `pip install` 必然失败，任何人新装环境也装不上。
-
-现改为实测通过的固定版本：
-
-```text
-fastapi==0.128.8
-uvicorn==0.39.0
-httpx==0.28.1
-```
-
-风险：如果原版本来自某个私有镜像，需要确认该镜像是否也要同步。
+结论：**原固定版本正确，不改**。本机 Python 环境使用了较旧的镜像索引，不能作为判断依据。
 
 ### `history/` 归档
 

@@ -18,10 +18,10 @@
 
 跳过的 1 项是 POSIX SIGTERM 测试，在 Linux 上执行；本机为 macOS。
 
-## 修复记录
+## 记录
 
-1. `requirements-progress.txt` 原先固定 `fastapi==0.162.0`、`uvicorn==0.54.0`，这两个版本在公开 PyPI 上不存在，导致新环境和 CI 无法安装。已改为实测通过的 `fastapi==0.128.8`、`uvicorn==0.39.0`、`httpx==0.28.1`。
-2. GitHub Actions 工作流改为使用统一入口 `run_offline_tests.py`，本次推送前从未在远端运行过，首次运行结果以 Actions 页面为准。
+1. 依赖版本经 GitHub Actions 实际安装日志核对，保持原固定值不变；本机镜像索引较旧，不作为判断依据。
+2. GitHub Actions 工作流改为使用统一入口 `run_offline_tests.py`，运行结果以 Actions 页面为准。
 3. 归档文件移动后，`docs/INTERVIEW_QA.md` 的链接与 `v1/VALIDATION.md`、`docs/VALIDATION_v0.6.md` 中的命令路径已同步更新。
 
 ## 边界
