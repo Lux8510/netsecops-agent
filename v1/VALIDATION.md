@@ -14,10 +14,10 @@
 | `yaml.safe_load(v1/lab/topology.clab.yml)` | Windows，已有 PyYAML | PASS：YAML 可解析，6 节点、6 链路；不等于 Containerlab 部署验证 |
 | `python -B v1/run_offline_tests.py` | Windows Python 3.12.10，临时 v1 独立副本 | PASS：23 项，0 跳过 |
 | `python3 v1/run_offline_tests.py` | Ubuntu 24.04/WSL2 Python 3.12.3，临时 v1 独立副本 | PASS：23 项，0 跳过 |
-| `.venv/Scripts/python.exe -B run_clean_offline_tests_v07.py` | Windows，现有虚拟环境 | PASS：77 项，1 跳过；跳过的是 POSIX SIGTERM 测试 |
+| `.venv/Scripts/python.exe -B run_offline_tests.py` | Windows，现有虚拟环境 | PASS：77 项，1 跳过；跳过的是 POSIX SIGTERM 测试 |
 | `python3 -m unittest discover -s labs/ospf-baseline/tests -p test_reliability.py -v` | Ubuntu/WSL2 | PASS：11 项，0 跳过，含 POSIX SIGTERM mock 子进程测试 |
-| `python3 run_clean_offline_tests_v07.py` | Ubuntu/WSL2 系统 Python | 未执行测试：缺少 `fastapi`，入口退出 2；本轮未安装依赖 |
-| `python3 run_clean_offline_tests_v06.py` | Ubuntu/WSL2 系统 Python | FAIL：75 项中 `test_progress_api` 导入失败，原因同为缺少 `fastapi`；原始输出保存在忽略目录 `review-results/v0.6-demo-offline-20261029T064728Z/`；本轮未更改旧测试 |
+| `python3 run_offline_tests.py` | Ubuntu/WSL2 系统 Python | 未执行测试：缺少 `fastapi`，入口退出 2；本轮未安装依赖 |
+| `python3 history/run_clean_offline_tests_v06.py` | Ubuntu/WSL2 系统 Python | FAIL：75 项中 `test_progress_api` 导入失败，原因同为缺少 `fastapi`；原始输出保存在忽略目录 `review-results/v0.6-demo-offline-20261029T064728Z/`；本轮未更改旧测试 |
 
 以上仅证明模型校验、静态资产一致性与旧版适用离线回归。尚未运行 `clab` 解析/部署、FRR 运行配置读取、OSPF FULL、路由转发或 HTTP 端到端检查；四组 `synthetic/mock` 样本也不是现场验收。
 

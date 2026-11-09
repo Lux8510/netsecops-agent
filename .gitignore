@@ -8,6 +8,7 @@ v1/lab/clab-netsecops-v1-http/
 __pycache__/
 *.py[cod]
 .venv/
+.venv*/
 venv/
 
 # Generated lab state and collected runtime evidence

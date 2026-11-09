@@ -3,6 +3,7 @@ name: Offline regression and replay workbench
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   offline:
@@ -14,12 +15,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install bounded local progress API test dependencies
-        run: python3 -m pip install -r requirements-progress.txt
-      - name: Credential-free Python tests in a clean source copy
-        run: python3 run_clean_offline_tests_v07.py
-      - name: Check selected publication files and documentation links
-        run: python3 tools/check_publication.py
+          cache: pip
+          cache-dependency-path: requirements-progress.txt
+      - name: Install bounded local service test dependencies
+        run: python -m pip install -r requirements-progress.txt
+      - name: Core agent suite and v1 topology suite in clean copies
+        run: python -B run_offline_tests.py
+      - name: Check publishable examples and documentation links
+        run: python -B tools/check_publication.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

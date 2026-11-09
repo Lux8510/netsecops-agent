@@ -16,7 +16,7 @@
 
 7. **如何避免定位正确却建议改错设备？** 权威 `root_cause` 把故障类型、节点、接口及直接证据绑定；管理关闭/passive 的建议由已验证节点和接口生成。区域不一致只能确认两端 Area 不同，不能仅据此指定哪一端设计有误。独立评判会拒绝结构化位置或修复对象与证据不一致的报告；Agent 不执行改配。依据：[权威结果生成](../labs/ospf-baseline/agent_loop.py) `validate_final()`、[评判器](../labs/ospf-baseline/judge_agent_trace.py) `verdict()`、[可靠性反例测试](../labs/ospf-baseline/tests/test_reliability.py)。
 
-8. **如何区分网络故障、采集失败和证据不足？** 先验证观测身份、命令、输出接口/地址；命令真实失败不能用于证明 Area。关键失败若仍有效，最终为 `collection_failure`；Area 缺一端或字段矛盾不能确认具体根因。只有同节点、同接口、同查询的有效成功重采才能取代旧失败，旧记录不删除；成功返回的 `OSPF not enabled` 没有 Area，不能自动得出区域正常。依据：[观测身份校验](../labs/ospf-baseline/collect_evidence.py) `observation_mismatch()`、[失败/重采分类](../labs/ospf-baseline/evidence_checks.py) `critical_history()`、[v0.5 修复说明](../REVIEW_REPAIR_v0.5.md)、[缺 Area](../examples/cases/missing-area.json)与[失败](../examples/cases/collection-failure.json)保存轨迹。
+8. **如何区分网络故障、采集失败和证据不足？** 先验证观测身份、命令、输出接口/地址；命令真实失败不能用于证明 Area。关键失败若仍有效，最终为 `collection_failure`；Area 缺一端或字段矛盾不能确认具体根因。只有同节点、同接口、同查询的有效成功重采才能取代旧失败，旧记录不删除；成功返回的 `OSPF not enabled` 没有 Area，不能自动得出区域正常。依据：[观测身份校验](../labs/ospf-baseline/collect_evidence.py) `observation_mismatch()`、[失败/重采分类](../labs/ospf-baseline/evidence_checks.py) `critical_history()`、[v0.5 修复说明](../history/REVIEW_REPAIR_v0.5.md)、[缺 Area](../examples/cases/missing-area.json)与[失败](../examples/cases/collection-failure.json)保存轨迹。
 
 9. **怎样验证结果，如何解释“72 项通过”？** 离线 72 项是无密钥、无模型、无 Docker 的干净副本代码回归；真实模型验收另核对 API 请求、工具轨迹、证据引用、保护层差异、耗时和 token；现场网络健康检查又是第三件事。v0.5 单次真实验收前三例 PASS、动态例 NOT_EXERCISED、总体 INCOMPLETE，最终网络 `HEALTHY_UNCHANGED`，不能与早期通过数据相加成准确率。依据：[v0.6 离线与网页验证](VALIDATION_v0.6.md)、[历史验收边界](PROJECT_OVERVIEW.md)、[独立评判代码](../labs/ospf-baseline/judge_agent_trace.py)。完整历史验收文件保留本地，不在源码仓库。
 

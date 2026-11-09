@@ -4,7 +4,7 @@
 
 | 类别 | 实际执行 | 结果 | 不能推断什么 |
 |---|---|---|---|
-| Python 干净临时副本 | Ubuntu/WSL2，`python3 run_clean_offline_tests_v06.py`；仅复制源码、源配置和 tests/fixtures，不带 `.env`/历史运行/容器目录 | 72 tests，0 skipped，PASS；Python 3.12.3 | 不等于当下现场网络健康或真实模型准确率 |
+| Python 干净临时副本 | Ubuntu/WSL2，`python3 history/run_clean_offline_tests_v06.py`；仅复制源码、源配置和 tests/fixtures，不带 `.env`/历史运行/容器目录 | 72 tests，0 skipped，PASS；Python 3.12.3 | 不等于当下现场网络健康或真实模型准确率 |
 | Windows 辅助检查 | Windows Python 3.12.10 执行同一入口 | 72 tests，1 skipped（仅 Linux/WSL 的 mock SIGTERM 测试），PASS | 不代替 Linux 信号测试 |
 | 前端 | `cd web && npm run check` | TypeScript typecheck PASS；Vitest 7 tests PASS；Vite production build PASS；`web/dist/` 含五份案例 | 不等于网页调用过模型或实验设备 |
 | 发布样本 | `python3 tools/check_publication.py` | 仅检查白名单案例/fixtures、占位配置、个人路径/凭据模式及当前文档链接 | 静态扫描不能保证任意未来文件无敏感信息 |
