@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "name": "netsecops-v1-http",
+  "nodes": {
+    "client": {"role": "client", "interfaces": {"eth1": "10.101.0.2/30"}},
+    "r1": {"role": "router", "router_id": "10.255.1.1", "interfaces": {"eth1": "10.101.0.1/30", "eth2": "10.12.0.1/30", "eth3": "10.13.0.1/30", "lo": "10.255.1.1/32"}},
+    "r2": {"role": "router", "router_id": "10.255.1.2", "interfaces": {"eth1": "10.12.0.2/30", "eth2": "10.24.0.1/30", "lo": "10.255.1.2/32"}},
+    "r3": {"role": "router", "router_id": "10.255.1.3", "interfaces": {"eth1": "10.13.0.2/30", "eth2": "10.34.0.1/30", "lo": "10.255.1.3/32"}},
+    "r4": {"role": "router", "router_id": "10.255.1.4", "interfaces": {"eth1": "10.24.0.2/30", "eth2": "10.34.0.2/30", "eth3": "10.104.0.1/30", "lo": "10.255.1.4/32"}},
+    "server": {"role": "server", "interfaces": {"eth1": "10.104.0.2/30"}}
+  },
+  "links": [
+    {"name": "client-r1", "endpoints": [{"node": "client", "interface": "eth1"}, {"node": "r1", "interface": "eth1"}]},
+    {"name": "r1-r2", "ospf_cost": 10, "endpoints": [{"node": "r1", "interface": "eth2"}, {"node": "r2", "interface": "eth1"}]},
+    {"name": "r2-r4", "ospf_cost": 10, "endpoints": [{"node": "r2", "interface": "eth2"}, {"node": "r4", "interface": "eth1"}]},
+    {"name": "r1-r3", "ospf_cost": 50, "endpoints": [{"node": "r1", "interface": "eth3"}, {"node": "r3", "interface": "eth1"}]},
+    {"name": "r3-r4", "ospf_cost": 50, "endpoints": [{"node": "r3", "interface": "eth2"}, {"node": "r4", "interface": "eth2"}]},
+    {"name": "r4-server", "endpoints": [{"node": "r4", "interface": "eth3"}, {"node": "server", "interface": "eth1"}]}
+  ],
+  "business_targets": [
+    {"name": "http-health", "node": "server", "interface": "eth1", "address": "10.104.0.2", "port": 8080, "path": "/health", "source_nodes": ["client"]}
+  ]
+}

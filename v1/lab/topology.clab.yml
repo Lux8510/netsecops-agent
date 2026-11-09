@@ -1,0 +1,63 @@
+name: netsecops-v1-http
+
+# Planned only. Check the management/data ranges and container names before deploy.
+mgmt:
+  network: netsecops-v1-mgmt
+  ipv4-subnet: 172.31.87.0/24
+
+topology:
+  groups:
+    routers:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      enforce-startup-config: true
+      daemons:
+        - ospfd
+
+  nodes:
+    client:
+      kind: linux
+      image: python:3.12.15-alpine3.24
+      mgmt-ipv4: 172.31.87.11
+      cmd: tail -f /dev/null
+      exec:
+        - ip address add 10.101.0.2/30 dev eth1
+        - ip link set eth1 up
+        - ip route replace 10.104.0.0/30 via 10.101.0.1 dev eth1
+
+    r1:
+      group: routers
+      mgmt-ipv4: 172.31.87.12
+      startup-config: configs/r1/frr.conf
+    r2:
+      group: routers
+      mgmt-ipv4: 172.31.87.13
+      startup-config: configs/r2/frr.conf
+    r3:
+      group: routers
+      mgmt-ipv4: 172.31.87.14
+      startup-config: configs/r3/frr.conf
+    r4:
+      group: routers
+      mgmt-ipv4: 172.31.87.15
+      startup-config: configs/r4/frr.conf
+
+    server:
+      kind: linux
+      image: python:3.12.15-alpine3.24
+      mgmt-ipv4: 172.31.87.16
+      binds:
+        - services:/srv/http:ro
+      cmd: python3 -m http.server 8080 --bind 0.0.0.0 --directory /srv/http
+      exec:
+        - ip address add 10.104.0.2/30 dev eth1
+        - ip link set eth1 up
+        - ip route replace 10.101.0.0/30 via 10.104.0.1 dev eth1
+
+  links:
+    - endpoints: ["client:eth1", "r1:eth1"]
+    - endpoints: ["r1:eth2", "r2:eth1"]
+    - endpoints: ["r2:eth2", "r4:eth1"]
+    - endpoints: ["r1:eth3", "r3:eth1"]
+    - endpoints: ["r3:eth2", "r4:eth2"]
+    - endpoints: ["r4:eth3", "server:eth1"]

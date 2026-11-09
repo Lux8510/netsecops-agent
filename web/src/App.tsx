@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import LiveProgress from "./LiveProgress";
+import Baseline from "./Baseline";
 import {
   Background,
   Controls,
@@ -951,6 +952,7 @@ export default function App() {
           </section>
         </aside>
       </div>
+      <Baseline />
       <footer>
         NetSecOps Agent · 保存轨迹只读展示 · 不含 API
         Key、命令执行或配置写入能力

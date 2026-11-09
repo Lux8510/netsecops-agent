@@ -1,4 +1,6 @@
 .env
+v1/results/
+v1/lab/clab-netsecops-v1-http/
 .env.*
 !.env.example
 

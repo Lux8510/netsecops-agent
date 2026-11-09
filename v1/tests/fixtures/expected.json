@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "provenance": "synthetic/mock",
+  "labels_not_for_agent_input": {
+    "sample-01.json": "normal intended path and HTTP success",
+    "sample-02.json": "one transit link down; backup path and HTTP success",
+    "sample-03.json": "business subnet missing from mock r1 route table",
+    "sample-04.json": "HTTP service stopped while mock route exists"
+  }
+}
