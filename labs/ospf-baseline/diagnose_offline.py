@@ -262,6 +262,18 @@ def diagnose(document: Any) -> dict[str, Any]:
         return result("insufficient_evidence", "同时发现管理关闭与 passive 配置，不能归因为单一故障。",
                       admin_evidence + passive_evidence, ["存在多个直接异常，需要分别核实"],
                       ["只读复核两端接口及 OSPF 运行配置。"], "不要基于单故障假设修改配置。", collected_at)
+    configured_areas = {node: (discovered.get(node) or {}).get("link_area") for node in node_names}
+    areas_differ = len(set(value for value in configured_areas.values() if isinstance(value, str))) == 2
+    if admin_evidence and areas_differ:
+        return result("insufficient_evidence", "同时发现管理关闭与区域不一致，不能归因为单一故障。",
+                      admin_evidence, ["存在两个直接异常，需要分别核实"],
+                      ["分别只读核对接口管理状态与 OSPF 区域配置。"],
+                      "不要基于单故障假设修改配置。", collected_at)
+    if passive_evidence and areas_differ:
+        return result("insufficient_evidence", "同时发现 OSPF passive 与区域不一致，不能归因为单一故障。",
+                      passive_evidence, ["存在两个直接异常，需要分别核实"],
+                      ["分别只读核对 passive 状态与 OSPF 区域配置。"],
+                      "不要基于单故障假设修改配置。", collected_at)
     if admin_evidence:
         return result("interface_admin_down", "直接证据支持一侧互联接口被管理关闭。",
                       admin_evidence, [], ["只读复核该接口管理状态及运行配置。"],

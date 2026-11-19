@@ -15,6 +15,7 @@ from collect_evidence import (EXPECTED_IMAGE, LAB_DIR, Layout, checked_ipv4,
                               execute, observation_mismatch, parse_node_config,
                               ping_unreachable_observed,
                               read_layout, sections, utc_now)
+from untrusted import scan_record
 
 
 TOOL_ARGUMENTS = {
@@ -212,6 +213,7 @@ class AgentTools:
         except (OSError, KeyError, TypeError) as exc:
             record["status"] = "unavailable"
             record["error"] = f"{type(exc).__name__}: tool observation unavailable"
+        record["untrusted"] = scan_record(record)
         self.evidence[evidence_id] = record
         return record
 

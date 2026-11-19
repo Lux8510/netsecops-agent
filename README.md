@@ -117,7 +117,7 @@ Containerlab + FRR 实验网
 
 | 项目 | 结果 | 说明 |
 | --- | --- | --- |
-| 核心 Agent 套件 | 101 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
+| 核心 Agent 套件 | 136 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
 | v1 拓扑套件 | 26 项 | 6 节点拓扑意图、授权范围、候选路径 |
 | 前端 | 7 项 + 类型检查 + 构建 | `npm run check` |
 | 保存轨迹 | 5 份 | 正常、采集失败、缺 Area、区域不一致、管理关闭 |
@@ -132,11 +132,18 @@ Containerlab + FRR 实验网
 
 - **故障注入矩阵**：`normal / area_mismatch / admin_down / ospf_passive` 四类场景，输出根因准确率、证据覆盖率、虚假置信率、弃权率。离线评估读已保存轨迹，现场矩阵需要 Linux/WSL2 + Docker + DeepSeek Key。
 - **模拟修复**：诊断 → 固定命令修复 → 重新诊断 → 无论成败都回滚；只有三种可修复状态，命令白名单 + 双重确认。
+- **语义证据校验**：不只看“引用了哪个工具”，还解析输出里的 Area、邻居数、管理状态与 passive，确认结论真的被证据支持。
+- **不可信输出**：扫描配置/banner 中的提示注入；超长输出保留头尾并标记截断。
+- **歧义保护**：同时存在两个直接故障时输出“证据不足”，不猜单一根因。
+- **统计与预算**：Wilson 95% 区间、小样本标记、失败样例清单；A/B 对比 token 与耗时预算。
+- **交接给 netcfg-evidence**：导出带哈希的证据包，由 netcfg 用自己的规则复算后创建变更单。
 
 ```bash
 make matrix     # 离线评估 4 条样例轨迹（无需 Docker/密钥）
 NETSECOPS_LIVE_MATRIX=1 python labs/ospf-baseline/experiment_matrix.py --live --runs 3
 NETSECOPS_LAB_SIMULATION=1 python labs/ospf-baseline/simulate_fix.py --target r2 --confirm-lab
+python labs/ospf-baseline/handoff.py --trace trace.json --device r1 --target r2 --out handoff.json
+python labs/ospf-baseline/ab_compare.py --variant chat=chat/manifest.json --variant reasoner=reasoner/manifest.json
 ```
 
 设计、指标定义与安全约束见 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)。现场矩阵与真实模拟修复尚未在 CI 执行。

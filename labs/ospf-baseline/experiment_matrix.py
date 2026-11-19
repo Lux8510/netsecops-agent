@@ -26,6 +26,9 @@ import subprocess
 import sys
 from typing import Any, Callable, Iterable
 
+from evidence_semantics import semantic_support
+from stats import rate as wilson_rate
+
 LAB_DIR = Path(__file__).resolve().parent
 DEFINITE = ("normal", "ospf_area_mismatch", "interface_admin_down", "ospf_passive")
 ABSTAIN = ("insufficient_evidence", "collection_failure", "incomplete", "api_error")
@@ -149,6 +152,7 @@ def trace_metrics(trace: dict[str, Any], expected: str) -> dict[str, Any]:
     definite = status in DEFINITE
     evidence = trace.get("evidence") or {}
     unknown = [item for item in cited_ids(trace) if item not in evidence]
+    semantic = semantic_support(trace, expected)
     return {
         "status": status,
         "expected": expected,
@@ -156,7 +160,10 @@ def trace_metrics(trace: dict[str, Any], expected: str) -> dict[str, Any]:
         "evidence_coverage": round(ratio, 4),
         "missing_proofs": missing,
         "definite": definite,
-        "false_confidence": bool(definite and ratio < 1.0),
+        "semantic_supported": semantic["supported"],
+        "semantic_contradictions": semantic["contradictions"],
+        "ambiguous_detected": semantic["ambiguous_faults"],
+        "false_confidence": bool(definite and (ratio < 1.0 or not semantic["supported"])),
         "wrong_confident": bool(definite and status != expected),
         "abstained": status in ABSTAIN,
         "unknown_citations": unknown,
@@ -184,26 +191,45 @@ def aggregate(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     by_scenario: dict[str, dict[str, Any]] = {}
     for scenario in sorted({item["scenario"] for item in items}):
         subset = [item for item in items if item["scenario"] == scenario]
+        hits = sum(1 for item in subset if item["root_cause_match"])
         by_scenario[scenario] = {
             "runs": len(subset),
-            "root_cause_accuracy": round(sum(1 for item in subset if item["root_cause_match"]) / len(subset), 4),
+            "root_cause_accuracy": round(hits / len(subset), 4),
+            "root_cause_accuracy_ci95": wilson_rate(hits, len(subset)),
             "evidence_coverage": round(sum(item["evidence_coverage"] for item in subset) / len(subset), 4),
+            "semantic_support_rate": round(sum(1 for item in subset if item["semantic_supported"]) / len(subset), 4),
             "false_confidence_rate": round(sum(1 for item in subset if item["false_confidence"]) / len(subset), 4),
             "abstention_rate": round(sum(1 for item in subset if item["abstained"]) / len(subset), 4),
         }
+    def count(key: str) -> int:
+        return sum(1 for item in items if item.get(key))
+
+    failures = [
+        {"scenario": item["scenario"], "trace": item.get("trace"), "status": item.get("status"),
+         "expected": item.get("expected"), "missing_proofs": item.get("missing_proofs"),
+         "semantic_contradictions": item.get("semantic_contradictions")}
+        for item in items
+        if not item.get("root_cause_match") or item.get("false_confidence")
+    ]
     return {
         "schema_version": 1,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "runs": total,
-        "root_cause_accuracy": rate("root_cause_match"),
+        "root_cause_accuracy": round(count("root_cause_match") / total, 4),
+        "root_cause_accuracy_ci95": wilson_rate(count("root_cause_match"), total),
         "mean_evidence_coverage": round(sum(item["evidence_coverage"] for item in items) / total, 4),
-        "false_confidence_rate": rate("false_confidence"),
-        "wrong_confident_rate": rate("wrong_confident"),
-        "abstention_rate": rate("abstained"),
-        "guardrail_intervention_rate": rate("guardrail_intervened"),
+        "semantic_support_rate": round(count("semantic_supported") / total, 4),
+        "false_confidence_rate": round(count("false_confidence") / total, 4),
+        "false_confidence_ci95": wilson_rate(count("false_confidence"), total),
+        "wrong_confident_rate": round(count("wrong_confident") / total, 4),
+        "abstention_rate": round(count("abstained") / total, 4),
+        "ambiguous_rate": round(count("ambiguous_detected") / total, 4),
+        "guardrail_intervention_rate": round(count("guardrail_intervened") / total, 4),
         "unknown_citation_rate": round(sum(1 for item in items if item["unknown_citations"]) / total, 4),
         "mean_tool_calls": mean("tool_calls"),
         "mean_elapsed_seconds": mean("elapsed_seconds"),
+        "underpowered": total < 5,
+        "failures": failures,
         "by_scenario": by_scenario,
         "items": items,
     }
@@ -246,8 +272,11 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "# 故障注入评测矩阵", "",
         f"生成时间：{summary['generated_at_utc']}；运行次数：{summary['runs']}", "",
         "| 指标 | 值 |", "| --- | --- |",
-        f"| 根因准确率 | {summary['root_cause_accuracy']:.1%} |",
+        f"| 根因准确率 | {summary['root_cause_accuracy']:.1%} "
+        f"（95% CI {summary['root_cause_accuracy_ci95']['ci95_low']:.1%}–"
+        f"{summary['root_cause_accuracy_ci95']['ci95_high']:.1%}） |",
         f"| 平均证据覆盖率 | {summary['mean_evidence_coverage']:.1%} |",
+        f"| 语义支持率 | {summary['semantic_support_rate']:.1%} |",
         f"| 虚假置信率 | {summary['false_confidence_rate']:.1%} |",
         f"| 错误但自信 | {summary['wrong_confident_rate']:.1%} |",
         f"| 弃权率 | {summary['abstention_rate']:.1%} |",
@@ -260,6 +289,13 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(f"| {name} | {value['runs']} | {value['root_cause_accuracy']:.1%} | "
                      f"{value['evidence_coverage']:.1%} | {value['false_confidence_rate']:.1%} | "
                      f"{value['abstention_rate']:.1%} |")
+    if summary.get("underpowered"):
+        lines += ["", "> 样本量不足 5 次/场景：区间很宽，只能作为方向性参考。"]
+    if summary.get("failures"):
+        lines += ["", "## 失败样例", ""]
+        for item in summary["failures"][:10]:
+            lines.append(f"- {item['scenario']}: {item['status']}（期望 {item['expected']}）；"
+                         f"缺证据 {item['missing_proofs']}；语义矛盾 {item['semantic_contradictions']}")
     lines += ["", "> 指标只针对受控单故障实验；不代表通用准确率。", ""]
     return "\n".join(lines)
 

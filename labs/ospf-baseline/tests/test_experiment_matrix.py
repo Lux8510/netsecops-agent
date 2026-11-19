@@ -94,6 +94,30 @@ class MetricsTest(unittest.TestCase):
         with self.assertRaises(MatrixError):
             aggregate([])
 
+    def test_metrics_include_semantic_support_and_ci(self):
+        metrics = trace_metrics(load_case("area-mismatch")["trace"], "ospf_area_mismatch")
+        self.assertTrue(metrics["semantic_supported"])
+        summary = aggregate([dict(metrics, scenario="area_mismatch")])
+        self.assertEqual(summary["semantic_support_rate"], 1.0)
+        self.assertEqual(summary["root_cause_accuracy_ci95"]["total"], 1)
+        self.assertTrue(summary["underpowered"])
+        self.assertEqual(summary["failures"], [])
+
+    def test_failures_list_records_mismatch_and_contradiction(self):
+        trace = deepcopy(load_case("normal")["trace"])
+        trace["final"]["status"] = "ospf_area_mismatch"
+        summary = aggregate([dict(trace_metrics(trace, "normal"), scenario="normal")])
+        self.assertEqual(len(summary["failures"]), 1)
+        self.assertEqual(summary["failures"][0]["status"], "ospf_area_mismatch")
+
+    def test_dropped_proof_marks_false_confidence(self):
+        trace = deepcopy(load_case("area-mismatch")["trace"])
+        trace["final"]["evidence_ids"] = [key for key, item in trace["evidence"].items()
+                                         if item["tool"] == "query_ospf_interface"]
+        metrics = trace_metrics(trace, "ospf_area_mismatch")
+        self.assertLess(metrics["evidence_coverage"], 1.0)
+        self.assertTrue(metrics["false_confidence"])
+
     def test_extract_trace_accepts_wrapper_and_raw_trace(self):
         case = load_case("admin-down")
         self.assertIs(extract_trace(case), case["trace"])

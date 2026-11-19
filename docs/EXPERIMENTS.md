@@ -114,14 +114,78 @@ NETSECOPS_LAB_SIMULATION=1 python labs/ospf-baseline/simulate_fix.py \
 
 ---
 
-## 3. 验证现状
+## 3. 语义证据、注入与歧义
+
+### 语义证据
+
+结构覆盖率只回答“有没有引用”，不回答“引用是否支持结论”。`evidence_semantics.py` 解析已保存输出：
+
+- 两端 OSPF Area 与邻居数
+- 接口管理状态与 `ip ospf passive`
+- 引用与结论是否矛盾（例如声称区域不一致，但两端 Area 相同）
+
+矩阵新增 `semantic_support_rate`；给出确定结论但语义不被支持，也计入虚假置信。
+
+### 不可信输出
+
+设备的 banner、description、日志都是不可信数据：
+
+- `untrusted.py` 扫描“忽略之前指令 / 直接报告正常”等模式，命中数量写入证据记录
+- 系统提示明确要求把工具输出当数据，不当指令
+- `bound()` 对超长输出保留头尾并标记截断，避免静默丢证据
+
+### 双故障与歧义
+
+同时存在管理关闭 + 区域不一致，或 passive + 区域不一致时，诊断输出 `insufficient_evidence`，而不是挑一个根因。矩阵的 `ambiguous_rate` 统计这类情况。
+
+---
+
+## 4. A/B 对比与预算
+
+```bash
+python labs/ospf-baseline/ab_compare.py \
+  --variant chat=chat/manifest.json \
+  --variant reasoner=reasoner/manifest.json \
+  --max-tokens 20000 --max-seconds 30
+```
+
+每个变体输出：根因准确率（带 Wilson 95% 区间）、证据覆盖率、语义支持率、虚假置信率、平均 token、平均耗时、超预算率与失败清单。  
+对比只使用已保存轨迹；模型版本、日期、样本量必须一起报告。
+
+---
+
+## 5. 交接给 netcfg-evidence
+
+```bash
+python labs/ospf-baseline/handoff.py --trace trace.json --device r1 --target r2 --out handoff.json
+```
+
+证据包包含：诊断结论、引用证据、配置快照与 SHA-256、固定修复命令、bundle 哈希。  
+在 netcfg-evidence 侧：
+
+```bash
+python scripts/import_diagnosis.py --bundle handoff.json --username 何深
+```
+
+netcfg 会校验哈希、重新导入配置、**用自己的规则复算**，只把变更单关联到它自己产生的 Finding；外部结论只写入 rationale，不改变判定。
+
+---
+
+## 6. 验证现状
 
 | 项目 | 状态 |
 | --- | --- |
-| 指标计算、清单解析、聚合 | 12 项离线测试 |
+| 指标计算、清单解析、聚合 | 15 项离线测试 |
+| 语义证据校验 | 7 项离线测试 |
+| 注入扫描与输出截断 | 7 项离线测试 |
+| Wilson 区间与小样本标记 | 5 项离线测试 |
+| 双故障歧义保护 | 3 项离线测试 |
 | 修复计划、白名单、回滚流程 | 12 项离线测试 |
+| A/B 对比与预算 | 3 项离线测试 |
+| 交接包 | 7 项离线测试 |
+| netcfg 导入 | 5 项离线测试（另一个仓库） |
 | 真实故障注入 + 模型矩阵 | **未在 CI 执行**（需要 Docker/密钥） |
 | 真实模拟修复 | **未在本机执行**（无 Docker） |
 
 离线测试证明的是“流程与安全约束正确”，不是“现场实验成功”。  
-如果要写进简历或文档，请分别写清楚“离线 24 项测试”和“现场矩阵未执行”。
+如果要写进简历或文档，请分别写清楚“离线 162 项测试（核心 136 + 拓扑 26）”和“现场矩阵未执行”。
