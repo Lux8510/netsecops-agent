@@ -117,7 +117,7 @@ Containerlab + FRR 实验网
 
 | 项目 | 结果 | 说明 |
 | --- | --- | --- |
-| 核心 Agent 套件 | 77 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
+| 核心 Agent 套件 | 101 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
 | v1 拓扑套件 | 26 项 | 6 节点拓扑意图、授权范围、候选路径 |
 | 前端 | 7 项 + 类型检查 + 构建 | `npm run check` |
 | 保存轨迹 | 5 份 | 正常、采集失败、缺 Area、区域不一致、管理关闭 |
@@ -125,6 +125,21 @@ Containerlab + FRR 实验网
 跳过的 1 项是 POSIX SIGTERM 测试，在 Linux 上执行。
 
 本次仓库收敛的实际运行记录见 [v1 收敛验证](docs/VALIDATION_v1-convergence.md)；真实模型调用与现场网络结果按版本记录在 [v0.6](docs/VALIDATION_v0.6.md)、[v0.7](docs/VALIDATION_v0.7.md)，历史记录不跨版本混算。
+
+## 故障注入与模拟修复
+
+两条新增能力，仍然只在实验网内、仍然只读诊断：
+
+- **故障注入矩阵**：`normal / area_mismatch / admin_down / ospf_passive` 四类场景，输出根因准确率、证据覆盖率、虚假置信率、弃权率。离线评估读已保存轨迹，现场矩阵需要 Linux/WSL2 + Docker + DeepSeek Key。
+- **模拟修复**：诊断 → 固定命令修复 → 重新诊断 → 无论成败都回滚；只有三种可修复状态，命令白名单 + 双重确认。
+
+```bash
+make matrix     # 离线评估 4 条样例轨迹（无需 Docker/密钥）
+NETSECOPS_LIVE_MATRIX=1 python labs/ospf-baseline/experiment_matrix.py --live --runs 3
+NETSECOPS_LAB_SIMULATION=1 python labs/ospf-baseline/simulate_fix.py --target r2 --confirm-lab
+```
+
+设计、指标定义与安全约束见 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)。现场矩阵与真实模拟修复尚未在 CI 执行。
 
 ## 目录
 

@@ -36,3 +36,6 @@ web/test-results/
 # Locally generated review archives
 review-bundle*.zip
 v05-targeted-*-review.zip
+matrix-report/
+simulation-runs/
+labs/ospf-baseline/matrix-runs/

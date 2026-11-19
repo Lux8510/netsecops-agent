@@ -1,0 +1,8 @@
+{
+  "runs": [
+    {"trace": "../labs/ospf-baseline/tests/fixtures/traces/normal.json", "scenario": "normal"},
+    {"trace": "../labs/ospf-baseline/tests/fixtures/traces/stage5-case-01.json", "scenario": "area_mismatch"},
+    {"trace": "../labs/ospf-baseline/tests/fixtures/traces/stage5-case-02.json", "scenario": "admin_down"},
+    {"trace": "../labs/ospf-baseline/tests/fixtures/traces/stage5-case-03.json", "scenario": "ospf_passive"}
+  ]
+}
