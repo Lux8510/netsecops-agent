@@ -57,8 +57,8 @@ class MetricsTest(unittest.TestCase):
         trace["final"]["status"] = "ospf_area_mismatch"
         metrics = trace_metrics(trace, "normal")
         self.assertTrue(metrics["wrong_confident"])
-        # Full evidence but a wrong label is "wrong", not "unsupported".
-        self.assertFalse(metrics["false_confidence"])
+        # A wrong claim is also unsupported by these observations.
+        self.assertTrue(metrics["false_confidence"])
         self.assertFalse(metrics["root_cause_match"])
 
     def test_abstention_is_not_false_confidence(self):

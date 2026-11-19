@@ -9,7 +9,7 @@ import unittest
 LAB_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(LAB_DIR))
 
-from untrusted import bound, scan, scan_record  # noqa: E402
+from untrusted import bound, bound_record, scan, scan_record  # noqa: E402
 
 
 class ScanTest(unittest.TestCase):
@@ -46,6 +46,15 @@ class BoundTest(unittest.TestCase):
         self.assertIn("TAIL", result["text"])
         self.assertIn("truncated", result["text"])
         self.assertGreater(result["original_bytes"], 1000)
+        self.assertLessEqual(len(result["text"].encode("utf-8")), 1000)
+
+    def test_bound_record_marks_and_bounds_observations(self):
+        record = {"observations": [{"stdout": "a" * 500, "stderr": "b" * 500}]}
+        bounded = bound_record(record, limit=200)
+        self.assertTrue(bounded["output_truncated"])
+        self.assertTrue(bounded["observations"][0]["stdout_truncated"])
+        self.assertLessEqual(len(bounded["observations"][0]["stdout"].encode()), 200)
+        self.assertEqual(len(record["observations"][0]["stdout"]), 500)  # raw untouched
 
     def test_tiny_limit_is_rejected(self):
         with self.assertRaises(ValueError):

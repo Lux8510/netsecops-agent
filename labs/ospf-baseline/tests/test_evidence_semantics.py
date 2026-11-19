@@ -43,7 +43,7 @@ class SemanticTest(unittest.TestCase):
     def test_wrong_claim_is_contradicted(self):
         result = semantic_support(load("normal.json"), "ospf_area_mismatch")
         self.assertFalse(result["supported"])
-        self.assertIn("expected two different areas", result["contradictions"])
+        self.assertIn("areas are not different", result["contradictions"])
 
     def test_area_claim_rejects_coexisting_admin_fault(self):
         result = semantic_support(load("stage5-case-02.json"), "ospf_area_mismatch")
@@ -53,6 +53,61 @@ class SemanticTest(unittest.TestCase):
     def test_facts_ignore_missing_observations(self):
         facts = collect_facts({"evidence": {}})
         self.assertEqual(facts, {})
+
+    def test_uncited_or_failed_commands_do_not_support_normal(self):
+        trace = {
+            "initial_topology": {"link": [{"node": "r1", "interface": "eth1"},
+                                          {"node": "r2", "interface": "eth1"}]},
+            "final": {"status": "normal", "evidence_ids": []},
+            "evidence": {
+                "E1": {"tool": "query_ospf_interface", "status": "ok",
+                       "arguments": {"node": "r1", "interface": "eth1"},
+                       "observations": [{"exit_code": 1, "stdout": "Area 0.0.0.0"}]},
+                "E2": {"tool": "query_ospf_interface", "status": "ok",
+                       "arguments": {"node": "r2", "interface": "eth1"},
+                       "observations": [{"exit_code": 1, "stdout": "Area 0.0.0.0"}]},
+            },
+        }
+        result = semantic_support(trace, "normal")
+        self.assertFalse(result["supported"])
+        self.assertIn("area evidence missing or incomplete", result["contradictions"])
+
+    def test_citations_without_neighbor_or_ping_are_not_enough(self):
+        trace = {
+            "initial_topology": {"link": [{"node": "r1", "interface": "eth1"},
+                                          {"node": "r2", "interface": "eth1"}]},
+            "final": {"status": "normal", "evidence_ids": ["E1", "E2"]},
+            "evidence": {
+                "E1": {"tool": "query_ospf_interface", "status": "ok",
+                       "arguments": {"node": "r1", "interface": "eth1"},
+                       "observations": [{"exit_code": 0, "stdout": "Area 0.0.0.0"}]},
+                "E2": {"tool": "query_ospf_interface", "status": "ok",
+                       "arguments": {"node": "r2", "interface": "eth1"},
+                       "observations": [{"exit_code": 0, "stdout": "Area 0.0.0.0"}]},
+            },
+        }
+        result = semantic_support(trace, "normal")
+        self.assertFalse(result["supported"])
+        self.assertTrue(any("neighbor" in item for item in result["contradictions"]))
+
+    def test_ping_loss_is_parsed_as_a_number(self):
+        def ping_trace(text: str) -> dict:
+            return {
+                "initial_topology": {"link": [{"node": "r1", "interface": "eth1"},
+                                              {"node": "r2", "interface": "eth1"}]},
+                "final": {"status": "normal", "evidence_ids": ["P1", "P2"]},
+                "evidence": {
+                    "P1": {"tool": "ping_address", "status": "ok",
+                           "arguments": {"node": "r1", "target": "10.255.0.2"},
+                           "observations": [{"exit_code": 0, "stdout": text}]},
+                    "P2": {"tool": "ping_address", "status": "ok",
+                           "arguments": {"node": "r2", "target": "10.255.0.1"},
+                           "observations": [{"exit_code": 0, "stdout": text}]},
+                },
+            }
+        self.assertTrue(collect_facts(ping_trace("0% packet loss"))["r1"]["ping_results"] == [True])
+        self.assertTrue(collect_facts(ping_trace("10% packet loss"))["r1"]["ping_results"] == [False])
+        self.assertTrue(collect_facts(ping_trace("100% packet loss"))["r1"]["ping_results"] == [False])
 
 
 if __name__ == "__main__":

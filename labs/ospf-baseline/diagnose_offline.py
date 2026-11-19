@@ -25,6 +25,12 @@ AREA_LINE = re.compile(
 )
 
 
+def interface_lines(config: str, interface: str) -> list[str]:
+    if not interface:
+        return []
+    return sections(config).get(f"interface {interface}", [])
+
+
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -264,14 +270,23 @@ def diagnose(document: Any) -> dict[str, Any]:
                       ["只读复核两端接口及 OSPF 运行配置。"], "不要基于单故障假设修改配置。", collected_at)
     configured_areas = {node: (discovered.get(node) or {}).get("link_area") for node in node_names}
     areas_differ = len(set(value for value in configured_areas.values() if isinstance(value, str))) == 2
+    area_evidence: list[dict[str, Any]] = []
+    if areas_differ:
+        for node in node_names:
+            interface = str((discovered.get(node) or {}).get("link_interface") or "")
+            item = mapped[node].get("running_config") or {}
+            config = str(item.get("stdout") or "")
+            for line in interface_lines(config, interface):
+                if re.search(r"ip ospf area", line):
+                    area_evidence.append(cite(node, item, line.strip(), "互联接口 OSPF 区域"))
     if admin_evidence and areas_differ:
         return result("insufficient_evidence", "同时发现管理关闭与区域不一致，不能归因为单一故障。",
-                      admin_evidence, ["存在两个直接异常，需要分别核实"],
+                      admin_evidence + area_evidence, ["存在两个直接异常，需要分别核实"],
                       ["分别只读核对接口管理状态与 OSPF 区域配置。"],
                       "不要基于单故障假设修改配置。", collected_at)
     if passive_evidence and areas_differ:
         return result("insufficient_evidence", "同时发现 OSPF passive 与区域不一致，不能归因为单一故障。",
-                      passive_evidence, ["存在两个直接异常，需要分别核实"],
+                      passive_evidence + area_evidence, ["存在两个直接异常，需要分别核实"],
                       ["分别只读核对 passive 状态与 OSPF 区域配置。"],
                       "不要基于单故障假设修改配置。", collected_at)
     if admin_evidence:

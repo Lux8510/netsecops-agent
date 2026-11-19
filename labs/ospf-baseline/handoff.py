@@ -54,14 +54,22 @@ def _evidence_items(trace: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
-def _config_snapshot(trace: dict[str, Any]) -> str | None:
-    for record in (trace.get("evidence") or {}).values():
-        if record.get("tool") != "query_interface_config":
+def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str] | None:
+    """Pick a successful running-config observation for the requested node."""
+    for evidence_id, record in (trace.get("evidence") or {}).items():
+        if record.get("tool") != "query_interface_config" or record.get("status") != "ok":
+            continue
+        if (record.get("arguments") or {}).get("node") != node:
             continue
         for observation in record.get("observations") or []:
+            if observation.get("exit_code") != 0:
+                continue
+            command = [str(part) for part in observation.get("command") or []]
+            if not any("show running-config" in part for part in command):
+                continue
             text = str(observation.get("stdout") or "")
             if "Current configuration" in text:
-                return text
+                return text, evidence_id
     return None
 
 
@@ -87,9 +95,25 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
     status = final.get("status")
     if status not in (*PLANNABLE, "normal", "insufficient_evidence", "collection_failure"):
         raise HandoffError(f"Unsupported diagnosis status: {status!r}")
-    config = _config_snapshot(trace)
-    if not config:
-        raise HandoffError("Trace has no running-config evidence to snapshot")
+    target = target or next(iter([item.get("node") for item in (trace.get("initial_topology") or {}).get("link") or []
+                                  if isinstance(item.get("node"), str)]), None)
+    if not target:
+        raise HandoffError("A target node is required to select the config snapshot")
+    snapshot = _config_snapshot(trace, target)
+    if not snapshot:
+        # The fix target and the node whose config was observed may differ.
+        # The bundle records the actual snapshot node and evidence ID.
+        for node in ("r1", "r2"):
+            if node != target:
+                snapshot = _config_snapshot(trace, node)
+                if snapshot:
+                    break
+    if not snapshot:
+        raise HandoffError(f"Trace has no successful running-config evidence for {target} or its peer")
+    config, evidence_id = snapshot
+    snapshot_node = next(
+        (record.get("arguments", {}).get("node") for record in (trace.get("evidence") or {}).values()
+         if record.get("evidence_id") == evidence_id), None)
     if commands is None:
         commands = derive_commands(trace, status, target)
     if commands:
@@ -109,7 +133,8 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
             "repair_suggestion": final.get("repair_suggestion"),
             "evidence_ids": final.get("evidence_ids") or [],
         },
-        "config_snapshot": {"text": config, "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest()},
+        "config_snapshot": {"node": snapshot_node, "target": target, "evidence_id": evidence_id, "text": config,
+                            "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest()},
         "proposed_commands": commands,
         "citations": _evidence_items(trace),
         "lab_only": True,

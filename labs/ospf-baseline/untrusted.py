@@ -36,16 +36,42 @@ def scan_record(record: dict[str, Any]) -> dict[str, Any]:
     return scan(text)
 
 
+MARKER = "\n…[truncated]…\n"
+
+
 def bound(text: str, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
-    """Keep head and tail, mark truncation; never silently drop the middle."""
+    """Keep head and tail within the byte budget, marker included."""
     if limit < 200:
         raise ValueError("limit is too small to preserve head and tail")
     encoded = text.encode("utf-8")
     if len(encoded) <= limit:
         return {"text": text, "truncated": False, "original_bytes": len(encoded)}
-    head = max(1, (limit * 2) // 3)
-    tail = max(1, limit - head)
-    clipped = (text.encode("utf-8")[:head].decode("utf-8", "ignore")
-               + "\n…[truncated]…\n"
-               + text.encode("utf-8")[-tail:].decode("utf-8", "ignore"))
+    budget = limit - len(MARKER.encode("utf-8"))
+    head = max(1, (budget * 2) // 3)
+    tail = max(1, budget - head)
+    clipped = (encoded[:head].decode("utf-8", "ignore") + MARKER
+               + encoded[-tail:].decode("utf-8", "ignore"))
     return {"text": clipped, "truncated": True, "original_bytes": len(encoded)}
+
+
+def bound_record(record: dict[str, Any], limit: int = 12_000) -> dict[str, Any]:
+    """A model-facing copy with bounded stdout/stderr; the trace keeps the raw record."""
+    result = dict(record)
+    observations = []
+    truncated = False
+    for item in record.get("observations") or []:
+        if not isinstance(item, dict):
+            continue
+        copy = dict(item)
+        for key in ("stdout", "stderr"):
+            value = copy.get(key)
+            if isinstance(value, str):
+                bounded = bound(value, limit)
+                copy[key] = bounded["text"]
+                copy[f"{key}_bytes"] = bounded["original_bytes"]
+                copy[f"{key}_truncated"] = bounded["truncated"]
+                truncated = truncated or bounded["truncated"]
+        observations.append(copy)
+    result["observations"] = observations
+    result["output_truncated"] = truncated
+    return result

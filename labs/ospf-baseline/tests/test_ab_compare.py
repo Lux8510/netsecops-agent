@@ -55,6 +55,36 @@ class CompareTest(unittest.TestCase):
             self.assertEqual(summary["runs"], 1)
             self.assertTrue(summary["root_cause_accuracy_ci95"]["underpowered"])
 
+    def test_missing_telemetry_is_not_counted_as_within_budget(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            trace = json.loads((FIXTURES / "traces/normal.json").read_text(encoding="utf-8"))
+            trace.pop("usage_total", None)
+            directory = root / "no-usage"
+            directory.mkdir()
+            (directory / "trace.json").write_text(json.dumps(trace), encoding="utf-8")
+            (directory / "manifest.json").write_text(json.dumps(
+                {"runs": [{"trace": "trace.json", "scenario": "normal"}]}), encoding="utf-8")
+            summary = variant_summary("no-usage", directory / "manifest.json", max_tokens=10)
+            self.assertIsNone(summary["over_budget_rate"])
+            self.assertEqual(summary["missing_telemetry_rate"], 1.0)
+
+    def test_unpaired_variants_are_rejected_by_default(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            one = write_variant(root, "one", FIXTURES / "traces/normal.json")
+            directory = root / "two"
+            directory.mkdir()
+            (directory / "trace.json").write_text(
+                (FIXTURES / "traces/stage5-case-01.json").read_text(encoding="utf-8"), encoding="utf-8")
+            (directory / "manifest.json").write_text(json.dumps(
+                {"runs": [{"trace": "trace.json", "scenario": "area_mismatch"}]}), encoding="utf-8")
+            from experiment_matrix import MatrixError
+            with self.assertRaises(MatrixError):
+                compare({"one": one, "two": directory / "manifest.json"})
+            summary = compare({"one": one, "two": directory / "manifest.json"}, allow_unpaired=True)
+            self.assertFalse(summary["paired"])
+
     def test_wrong_variant_shows_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

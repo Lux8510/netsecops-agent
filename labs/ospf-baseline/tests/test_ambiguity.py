@@ -38,6 +38,9 @@ class AmbiguityTest(unittest.TestCase):
         result = diagnose(document)
         self.assertEqual(result["status"], "insufficient_evidence")
         self.assertIn("区域不一致", result["conclusion"])
+        cited = "\n".join(item["output_excerpt"] for item in result["supporting_evidence"])
+        self.assertIn("ip ospf area 0.0.0.0", cited)
+        self.assertIn("ip ospf area 0.0.0.1", cited)
 
     def test_passive_plus_area_mismatch_abstains(self):
         document = break_peer_area(load("stage5-case-03.json"), "r2")

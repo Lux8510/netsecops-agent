@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Semantic checks on cited evidence: does the output actually support the claim?
 
-Structural coverage (tool + node) is necessary but not sufficient: a trace can
-cite the right command and still misread its output. These checks parse the
-saved observations and verify the facts the conclusion depends on.
+Facts are taken only from cited, successful observations that match the lab's
+interconnect interface. Missing facts stay unknown: they are never treated as
+support. A claim is checked against the claim itself; accuracy is checked
+separately against the scenario's expected status.
 """
 
 from __future__ import annotations
@@ -16,7 +17,16 @@ NEIGHBORS = re.compile(r"Neighbor Count is\s+(\d+)")
 ADMIN_DOWN = re.compile(r"^Interface\s+\S+\s+is\s+down\b", re.MULTILINE)
 SHUTDOWN_CONFIG = re.compile(r"^\s*Shutdown config is\s+(?!Not specified by CLI|off|disabled).+",
                              re.MULTILINE | re.IGNORECASE)
-PING_OK = re.compile(r"(?:0(?:\.0+)?% packet loss|, 0% packet loss)", re.IGNORECASE)
+LOSS = re.compile(r"(\d+(?:\.\d+)?)%\s*packet loss", re.IGNORECASE)
+DEFINITE = ("normal", "ospf_area_mismatch", "interface_admin_down", "ospf_passive")
+
+
+def _interconnects(trace: dict[str, Any]) -> dict[str, str]:
+    result = {}
+    for item in (trace.get("initial_topology") or {}).get("link") or []:
+        if isinstance(item, dict) and isinstance(item.get("node"), str) and isinstance(item.get("interface"), str):
+            result[item["node"]] = item["interface"]
+    return result
 
 
 def _observations(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -25,6 +35,15 @@ def _observations(evidence: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _text(evidence: dict[str, Any]) -> str:
     return "\n".join(str(item.get("stdout") or "") for item in _observations(evidence))
+
+
+def _successful(evidence: dict[str, Any]) -> bool:
+    if evidence.get("status") != "ok":
+        return False
+    observations = _observations(evidence)
+    if not observations:
+        return False
+    return all(item.get("exit_code") == 0 and not item.get("error") for item in observations)
 
 
 def _config_section(text: str, interface: str) -> str:
@@ -46,23 +65,38 @@ def _node(evidence: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def collect_facts(trace: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _interface(evidence: dict[str, Any]) -> str | None:
+    value = (evidence.get("arguments") or {}).get("interface")
+    return value if isinstance(value, str) else None
+
+
+def collect_facts(trace: dict[str, Any], *, cited_only: bool = True) -> dict[str, dict[str, Any]]:
+    cited = set((trace.get("final") or {}).get("evidence_ids") or []) if cited_only else None
+    links = _interconnects(trace)
     facts: dict[str, dict[str, Any]] = {}
-    for evidence in (trace.get("evidence") or {}).values():
+    for evidence_id, evidence in (trace.get("evidence") or {}).items():
+        if cited is not None and evidence_id not in cited:
+            continue
+        if not _successful(evidence):
+            continue
         node = _node(evidence)
         tool = evidence.get("tool")
         if not node or tool not in ("query_ospf_interface", "query_neighbors", "query_interface",
                                     "query_interface_config", "ping_address"):
             continue
-        fact = facts.setdefault(node, {})
+        fact = facts.setdefault(node, {"neighbor_counts": [], "ping_results": [],
+                                       "passive_interfaces": set()})
         text = _text(evidence)
+        interconnect = links.get(node)
         if tool == "query_ospf_interface":
+            if interconnect and _interface(evidence) != interconnect:
+                continue
             area = AREA.search(text)
             if area:
                 fact["area"] = area.group(1)
             count = NEIGHBORS.search(text)
             if count:
-                fact["neighbors"] = int(count.group(1))
+                fact["neighbor_counts"].append(int(count.group(1)))
             if ADMIN_DOWN.search(text) or (SHUTDOWN_CONFIG.search(text) and "is down" in text):
                 fact["admin_down"] = True
             else:
@@ -70,95 +104,91 @@ def collect_facts(trace: dict[str, Any]) -> dict[str, dict[str, Any]]:
         elif tool == "query_neighbors":
             rows = [line for line in text.splitlines()
                     if line.strip() and not line.lower().startswith(("neighbor id", "interface", "---"))]
-            fact["neighbor_rows"] = len(rows)
             if "FULL" in text.upper():
-                fact["neighbor_full"] = True
+                fact["neighbor_counts"].append(1)
             elif rows == 0:
-                fact["neighbor_full"] = False
+                fact["neighbor_counts"].append(0)
         elif tool == "query_interface":
+            if interconnect and _interface(evidence) != interconnect:
+                continue
             if ADMIN_DOWN.search(text) or SHUTDOWN_CONFIG.search(text):
                 fact["admin_down"] = True
         elif tool == "query_interface_config":
-            interface = (evidence.get("arguments") or {}).get("interface")
-            section = _config_section(text, str(interface))
-            fact.setdefault("passive_interfaces", set())
+            interface = _interface(evidence)
+            if not interface:
+                continue
+            section = _config_section(text, interface)
             if re.search(r"(?m)^\s*ip ospf passive\s*$", section):
-                fact["passive_interfaces"].add(str(interface))
+                fact["passive_interfaces"].add(interface)
+                if interface == interconnect:
+                    fact["passive"] = True
         elif tool == "ping_address":
-            if PING_OK.search(text):
-                fact["ping_ok"] = True
-            elif re.search(r"(?:100% packet loss|Network unreachable)", text, re.IGNORECASE):
-                fact["ping_ok"] = False
+            loss = LOSS.search(text)
+            if loss:
+                fact["ping_results"].append(float(loss.group(1)) == 0.0)
+            elif re.search(r"Network unreachable", text, re.IGNORECASE):
+                fact["ping_results"].append(False)
     return facts
 
 
-def _facts_for(facts: dict[str, dict[str, Any]], nodes: tuple[str, ...] = ("r1", "r2")) -> dict[str, Any]:
-    areas = [facts.get(node, {}).get("area") for node in nodes]
-    areas = [area for area in areas if isinstance(area, str)]
-    admin = [node for node in nodes if facts.get(node, {}).get("admin_down")]
-    passive = [node for node in nodes
-               if facts.get(node, {}).get("passive_interfaces")]
-    return {"areas": areas, "admin_down": admin, "passive": passive,
-            "neighbors": {node: facts.get(node, {}).get("neighbors") for node in nodes}}
+def _summary(facts: dict[str, dict[str, Any]], nodes: tuple[str, ...]) -> dict[str, Any]:
+    areas = {node: facts.get(node, {}).get("area") for node in nodes}
+    known_areas = [value for value in areas.values() if isinstance(value, str)]
+    neighbors = {node: facts.get(node, {}).get("neighbor_counts") or [] for node in nodes}
+    pings = {node: facts.get(node, {}).get("ping_results") or [] for node in nodes}
+    return {
+        "areas": known_areas,
+        "area_by_node": areas,
+        "neighbors": neighbors,
+        "pings": pings,
+        "admin_down": [node for node in nodes if facts.get(node, {}).get("admin_down")],
+        "passive": [node for node in nodes if facts.get(node, {}).get("passive")],
+    }
 
 
-def semantic_support(trace: dict[str, Any], expected: str) -> dict[str, Any]:
-    facts = _facts_for(collect_facts(trace))
+def semantic_support(trace: dict[str, Any], claim: str) -> dict[str, Any]:
+    if claim not in DEFINITE + ("insufficient_evidence", "collection_failure"):
+        raise ValueError(f"Unsupported claim: {claim!r}")
+    facts = _summary(collect_facts(trace), ("r1", "r2"))
     areas = facts["areas"]
     admin = facts["admin_down"]
     passive = facts["passive"]
-    neighbor_values = [value for value in facts["neighbors"].values() if isinstance(value, int)]
     checks: list[dict[str, Any]] = []
     contradictions: list[str] = []
     ambiguous = len(set(admin) | set(passive)) + (1 if len(set(areas)) == 2 else 0) >= 2
 
-    if expected == "normal":
-        if len(areas) == 2 and len(set(areas)) == 1:
-            checks.append({"check": "areas_equal", "ok": True})
-        elif len(areas) == 2:
-            checks.append({"check": "areas_equal", "ok": False})
-            contradictions.append("areas differ")
-        else:
-            contradictions.append("area evidence missing")
-        if neighbor_values and all(value > 0 for value in neighbor_values):
-            checks.append({"check": "neighbors_present", "ok": True})
-        elif neighbor_values:
-            checks.append({"check": "neighbors_present", "ok": False})
-            contradictions.append("neighbor count is zero")
-        if admin:
-            contradictions.append("admin down on " + ",".join(admin))
-        if passive:
-            contradictions.append("passive on " + ",".join(passive))
-    elif expected == "ospf_area_mismatch":
-        if len(set(areas)) == 2:
-            checks.append({"check": "areas_differ", "ok": True})
-        else:
-            contradictions.append("expected two different areas")
-        if admin or passive:
-            contradictions.append("a direct interface fault exists as well")
-    elif expected == "interface_admin_down":
-        if admin:
-            checks.append({"check": "admin_down_present", "ok": True})
-        else:
-            contradictions.append("no admin down evidence")
-        if len(set(areas)) == 2:
-            contradictions.append("areas also differ (ambiguous)")
-    elif expected == "ospf_passive":
-        if passive:
-            checks.append({"check": "passive_present", "ok": True})
-        else:
-            contradictions.append("no passive evidence")
-        if len(set(areas)) == 2:
-            contradictions.append("areas also differ (ambiguous)")
-    elif expected == "insufficient_evidence":
-        checks.append({"check": "abstention", "ok": True})
-    elif expected == "collection_failure":
-        checks.append({"check": "collection_failure", "ok": True})
+    def check(name: str, ok: bool, reason: str) -> None:
+        checks.append({"check": name, "ok": ok})
+        if not ok:
+            contradictions.append(reason)
 
-    supported = not contradictions and all(check["ok"] for check in checks)
-    return {"supported": supported, "checks": checks, "contradictions": contradictions,
-            "ambiguous_faults": ambiguous, "facts": {
-                "areas": sorted(set(areas)),
-                "admin_down": sorted(admin),
-                "passive": sorted(passive),
-            }}
+    if claim == "normal":
+        check("areas_known", len(areas) == 2, "area evidence missing or incomplete")
+        check("areas_equal", len(areas) == 2 and len(set(areas)) == 1, "areas differ")
+        known_neighbors = {node: values for node, values in facts["neighbors"].items() if values}
+        check("neighbors_known", len(known_neighbors) == 2, "neighbor evidence missing")
+        check("neighbors_present", len(known_neighbors) == 2
+              and all(any(value > 0 for value in values) for values in known_neighbors.values()),
+              "neighbor count is zero")
+        ping_values = [value for values in facts["pings"].values() for value in values]
+        check("ping_evidence", len(ping_values) >= 2 and all(ping_values), "ping evidence missing or failing")
+        check("no_admin_down", not admin, "admin down on " + ",".join(admin))
+        check("no_passive", not passive, "passive on " + ",".join(passive))
+    elif claim == "ospf_area_mismatch":
+        check("areas_known", len(areas) == 2, "need two known interconnect areas")
+        check("areas_differ", len(set(areas)) == 2, "areas are not different")
+        check("no_direct_fault", not admin and not passive, "a direct interface fault also exists")
+    elif claim == "interface_admin_down":
+        check("admin_down_present", bool(admin), "no admin down evidence")
+        check("areas_equal", len(set(areas)) <= 1, "areas also differ (ambiguous)")
+    elif claim == "ospf_passive":
+        check("passive_present", bool(passive), "no passive evidence on the interconnect")
+        check("areas_equal", len(set(areas)) <= 1, "areas also differ (ambiguous)")
+    else:
+        checks.append({"check": "abstention", "ok": True})
+
+    return {"supported": not contradictions and all(check["ok"] for check in checks),
+            "checks": checks, "contradictions": contradictions, "ambiguous_faults": ambiguous,
+            "facts": {"areas": sorted(set(areas)),
+                      "admin_down": sorted(admin), "passive": sorted(passive),
+                      "neighbor_counts": facts["neighbors"], "pings": facts["pings"]}}

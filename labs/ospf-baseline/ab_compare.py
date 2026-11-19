@@ -29,6 +29,8 @@ def variant_summary(name: str, manifest: Path, *, max_tokens: int | None = None,
     tokens: list[int] = []
     seconds: list[float] = []
     over_budget = 0
+    measurable = 0
+    missing = 0
     for entry in entries:
         trace_path = (manifest.parent / entry["trace"]).resolve()
         trace = extract_trace(load_json(trace_path))
@@ -39,9 +41,16 @@ def variant_summary(name: str, manifest: Path, *, max_tokens: int | None = None,
             tokens.append(total_tokens)
         if isinstance(elapsed, (int, float)):
             seconds.append(float(elapsed))
-        exceeded = ((max_tokens is not None and total_tokens is not None and total_tokens > max_tokens)
-                    or (max_seconds is not None and isinstance(elapsed, (int, float)) and elapsed > max_seconds))
-        over_budget += 1 if exceeded else 0
+        needs_tokens = max_tokens is not None
+        needs_seconds = max_seconds is not None
+        missing_piece = (needs_tokens and total_tokens is None) or (needs_seconds and not isinstance(elapsed, (int, float)))
+        exceeded = ((needs_tokens and total_tokens is not None and total_tokens > max_tokens)
+                    or (needs_seconds and isinstance(elapsed, (int, float)) and elapsed > max_seconds))
+        if missing_piece:
+            missing += 1
+        else:
+            measurable += 1
+            over_budget += 1 if exceeded else 0
         metrics.update({"scenario": entry["scenario"], "trace": str(trace_path),
                         "total_tokens": total_tokens, "budget_exceeded": bool(exceeded)})
         rows.append(metrics)
@@ -56,20 +65,31 @@ def variant_summary(name: str, manifest: Path, *, max_tokens: int | None = None,
         "false_confidence_rate": summary["false_confidence_rate"],
         "mean_tokens": round(sum(tokens) / len(tokens), 1) if tokens else None,
         "mean_elapsed_seconds": round(sum(seconds) / len(seconds), 2) if seconds else None,
-        "over_budget_rate": rate(over_budget, len(rows))["rate"],
+        "over_budget_rate": rate(over_budget, measurable)["rate"] if measurable else None,
+        "budget_measurable_runs": measurable,
+        "missing_telemetry_rate": round(missing / len(rows), 4),
         "budget": {"max_tokens": max_tokens, "max_seconds": max_seconds},
         "failures": summary["failures"],
     }
 
 
+def _signature(manifest: Path) -> list[tuple[str, str]]:
+    return [(entry["scenario"], entry["expected"]) for entry in load_manifest(manifest)]
+
+
 def compare(variants: dict[str, Path], *, max_tokens: int | None = None,
-            max_seconds: float | None = None) -> dict[str, Any]:
+            max_seconds: float | None = None, allow_unpaired: bool = False) -> dict[str, Any]:
     if len(variants) < 2:
         raise MatrixError("A/B comparison needs at least two variants")
+    signatures = {name: _signature(path) for name, path in variants.items()}
+    base_signature = next(iter(signatures.values()))
+    if not allow_unpaired and any(value != base_signature for value in signatures.values()):
+        raise MatrixError("Variants use different scenario/expected sets; pass --allow-unpaired to compare anyway")
     results = [variant_summary(name, path, max_tokens=max_tokens, max_seconds=max_seconds)
                for name, path in variants.items()]
     return {"schema_version": 1,
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "paired": not allow_unpaired,
             "variants": results}
 
 
@@ -85,7 +105,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
                   f"- 虚假置信率：{item['false_confidence_rate']:.1%}",
                   f"- 平均 token：{item['mean_tokens']}",
                   f"- 平均耗时：{item['mean_elapsed_seconds']} 秒",
-                  f"- 超预算率：{item['over_budget_rate']}"]
+                  f"- 超预算率：{item['over_budget_rate']}（可判定 {item['budget_measurable_runs']} 次）",
+                  f"- 遥测缺失率：{item['missing_telemetry_rate']:.1%}"]
         if item["budget"]["max_tokens"] or item["budget"]["max_seconds"]:
             lines.append(f"- 预算：token≤{item['budget']['max_tokens']}，"
                          f"耗时≤{item['budget']['max_seconds']} 秒")
@@ -101,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-tokens", type=int)
     parser.add_argument("--max-seconds", type=float)
     parser.add_argument("--out", type=Path, default=Path("ab-report"))
+    parser.add_argument("--allow-unpaired", action="store_true")
     args = parser.parse_args(argv)
     variants: dict[str, Path] = {}
     for value in args.variant:
@@ -109,7 +131,8 @@ def main(argv: list[str] | None = None) -> int:
         name, path = value.split("=", 1)
         variants[name] = Path(path)
     try:
-        summary = compare(variants, max_tokens=args.max_tokens, max_seconds=args.max_seconds)
+        summary = compare(variants, max_tokens=args.max_tokens, max_seconds=args.max_seconds,
+                          allow_unpaired=args.allow_unpaired)
     except MatrixError as exc:
         print(f"A/B error: {exc}")
         return 2

@@ -40,6 +40,13 @@ class WilsonTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             wilson(2, 1)
 
+    def test_empty_sample_has_a_null_rate(self):
+        result = rate(0, 0)
+        self.assertEqual(result["total"], 0)
+        self.assertIsNone(result["rate"])
+        self.assertIsNone(result["ci95_low"])
+        self.assertTrue(result["underpowered"])
+
     def test_rate_marks_underpowered(self):
         self.assertTrue(rate(3, 3, minimum=5)["underpowered"])
         self.assertFalse(rate(50, 50, minimum=5)["underpowered"])

@@ -29,6 +29,17 @@ class HandoffTest(unittest.TestCase):
         self.assertEqual(bundle["proposed_commands"],
                          ["no ip ospf area 0.0.0.1", "ip ospf area 0.0.0.0"])
 
+    def test_snapshot_is_bound_to_the_requested_node(self):
+        trace = load("stage5-case-01.json")
+        bundle = build_bundle(trace, "r2", target="r2")
+        snapshot = bundle["config_snapshot"]
+        self.assertEqual(snapshot["node"], "r2")
+        self.assertEqual(snapshot["evidence_id"], "E007")
+        self.assertIn("hostname r2", snapshot["text"])
+        peer = build_bundle(trace, "r1", target="r1")
+        self.assertEqual(peer["config_snapshot"]["node"], "r1")
+        self.assertIn("hostname r1", peer["config_snapshot"]["text"])
+
     def test_tampering_is_rejected(self):
         bundle = build_bundle(load("stage5-case-02.json"), "r1")
         bundle["diagnosis"]["status"] = "normal"

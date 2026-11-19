@@ -11,6 +11,7 @@ from typing import Any, Callable, Protocol
 
 from agent_config import AgentSettings
 from agent_tools import AgentTools, tool_schemas
+from untrusted import bound_record
 from collect_evidence import observation_mismatch, ospf_address_area, sections
 from deepseek_client import DeepSeekAPIError
 from evidence_checks import critical_history, normal_proofs
@@ -380,6 +381,9 @@ def run_agent(task: str, model: ChatModel, tools: AgentTools, settings: AgentSet
                         {key: value for key, value in observation.items() if key not in ("stdout", "stderr")}
                         for observation in result.get("observations") or []
                     ]
+                else:
+                    # Raw stdout/stderr stay in the trace; the model gets a bounded copy.
+                    model_result = bound_record(result)
                 messages.append({"role": "tool", "tool_call_id": call["id"],
                                  "content": json.dumps(model_result, ensure_ascii=False)})
             if limit_hit:

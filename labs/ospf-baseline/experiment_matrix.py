@@ -152,7 +152,11 @@ def trace_metrics(trace: dict[str, Any], expected: str) -> dict[str, Any]:
     definite = status in DEFINITE
     evidence = trace.get("evidence") or {}
     unknown = [item for item in cited_ids(trace) if item not in evidence]
-    semantic = semantic_support(trace, expected)
+    claim = status if status in DEFINITE else None
+    semantic = (semantic_support(trace, claim) if claim
+                else {"supported": True, "contradictions": [], "ambiguous_faults": False})
+    semantic_expected = (semantic_support(trace, expected) if expected in DEFINITE
+                         else semantic)
     return {
         "status": status,
         "expected": expected,
@@ -161,6 +165,7 @@ def trace_metrics(trace: dict[str, Any], expected: str) -> dict[str, Any]:
         "missing_proofs": missing,
         "definite": definite,
         "semantic_supported": semantic["supported"],
+        "semantic_expected_supported": semantic_expected["supported"],
         "semantic_contradictions": semantic["contradictions"],
         "ambiguous_detected": semantic["ambiguous_faults"],
         "false_confidence": bool(definite and (ratio < 1.0 or not semantic["supported"])),
@@ -198,6 +203,7 @@ def aggregate(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "root_cause_accuracy_ci95": wilson_rate(hits, len(subset)),
             "evidence_coverage": round(sum(item["evidence_coverage"] for item in subset) / len(subset), 4),
             "semantic_support_rate": round(sum(1 for item in subset if item["semantic_supported"]) / len(subset), 4),
+            "semantic_expected_support_rate": round(sum(1 for item in subset if item["semantic_expected_supported"]) / len(subset), 4),
             "false_confidence_rate": round(sum(1 for item in subset if item["false_confidence"]) / len(subset), 4),
             "abstention_rate": round(sum(1 for item in subset if item["abstained"]) / len(subset), 4),
         }
@@ -219,6 +225,7 @@ def aggregate(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "root_cause_accuracy_ci95": wilson_rate(count("root_cause_match"), total),
         "mean_evidence_coverage": round(sum(item["evidence_coverage"] for item in items) / total, 4),
         "semantic_support_rate": round(count("semantic_supported") / total, 4),
+        "semantic_expected_support_rate": round(count("semantic_expected_supported") / total, 4),
         "false_confidence_rate": round(count("false_confidence") / total, 4),
         "false_confidence_ci95": wilson_rate(count("false_confidence"), total),
         "wrong_confident_rate": round(count("wrong_confident") / total, 4),
@@ -276,7 +283,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"（95% CI {summary['root_cause_accuracy_ci95']['ci95_low']:.1%}–"
         f"{summary['root_cause_accuracy_ci95']['ci95_high']:.1%}） |",
         f"| 平均证据覆盖率 | {summary['mean_evidence_coverage']:.1%} |",
-        f"| 语义支持率 | {summary['semantic_support_rate']:.1%} |",
+        f"| 语义支持率（按最终声明） | {summary['semantic_support_rate']:.1%} |",
+        f"| 语义支持率（按期望场景） | {summary['semantic_expected_support_rate']:.1%} |",
         f"| 虚假置信率 | {summary['false_confidence_rate']:.1%} |",
         f"| 错误但自信 | {summary['wrong_confident_rate']:.1%} |",
         f"| 弃权率 | {summary['abstention_rate']:.1%} |",
