@@ -117,7 +117,7 @@ Containerlab + FRR 实验网
 
 | 项目 | 结果 | 说明 |
 | --- | --- | --- |
-| 核心 Agent 套件 | 144 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
+| 核心 Agent 套件 | 149 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
 | v1 拓扑套件 | 26 项 | 6 节点拓扑意图、授权范围、候选路径 |
 | 前端 | 7 项 + 类型检查 + 构建 | `npm run check` |
 | 保存轨迹 | 5 份 | 正常、采集失败、缺 Area、区域不一致、管理关闭 |
@@ -142,11 +142,11 @@ Containerlab + FRR 实验网
 make matrix     # 离线评估 4 条样例轨迹（无需 Docker/密钥）
 NETSECOPS_LIVE_MATRIX=1 python labs/ospf-baseline/experiment_matrix.py --live --runs 3
 NETSECOPS_LAB_SIMULATION=1 python labs/ospf-baseline/simulate_fix.py --target r2 --confirm-lab
-python labs/ospf-baseline/handoff.py --trace trace.json --device r1 --target r2 --out handoff.json
+python labs/ospf-baseline/handoff.py --trace trace.json --device r2 --target r2 --out handoff.json
 python labs/ospf-baseline/ab_compare.py --variant chat=chat/manifest.json --variant reasoner=reasoner/manifest.json
 ```
 
-设计、指标定义与安全约束见 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)。现场矩阵与真实模拟修复尚未在 CI 执行。2026-11-19 审查修正见 [docs/REVIEW_FIXES_2026-11-19.md](docs/REVIEW_FIXES_2026-11-19.md)。
+设计、指标定义与安全约束见 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)。现场矩阵与真实模拟修复尚未在 CI 执行。2026-11-19 两轮审查修正见 [docs/REVIEW_FIXES_2026-11-19.md](docs/REVIEW_FIXES_2026-11-19.md)。
 
 ## 目录
 

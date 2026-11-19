@@ -105,9 +105,24 @@ class SemanticTest(unittest.TestCase):
                            "observations": [{"exit_code": 0, "stdout": text}]},
                 },
             }
-        self.assertTrue(collect_facts(ping_trace("0% packet loss"))["r1"]["ping_results"] == [True])
-        self.assertTrue(collect_facts(ping_trace("10% packet loss"))["r1"]["ping_results"] == [False])
-        self.assertTrue(collect_facts(ping_trace("100% packet loss"))["r1"]["ping_results"] == [False])
+        def ping_ok(text: str) -> bool:
+            return collect_facts(ping_trace(text))["r1"]["ping_results"][0]["ok"]
+        self.assertTrue(ping_ok("0% packet loss"))
+        self.assertFalse(ping_ok("10% packet loss"))
+        self.assertFalse(ping_ok("100% packet loss"))
+
+    def test_duplicate_same_direction_ping_does_not_prove_normal(self):
+        import copy
+        trace = copy.deepcopy(load("normal.json"))
+        cited = list(trace["final"]["evidence_ids"])
+        e008 = next(key for key, item in trace["evidence"].items()
+                    if item["tool"] == "ping_address" and item["arguments"].get("node") == "r1")
+        trace["evidence"]["E-DUP"] = copy.deepcopy(trace["evidence"][e008])
+        trace["evidence"]["E-DUP"]["evidence_id"] = "E-DUP"
+        trace["final"]["evidence_ids"] = [item for item in cited if item != "E009"] + ["E-DUP"]
+        result = semantic_support(trace, "normal")
+        self.assertFalse(result["supported"])
+        self.assertIn("missing or failing ping for one direction", result["contradictions"])
 
 
 if __name__ == "__main__":

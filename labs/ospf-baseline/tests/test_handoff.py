@@ -21,7 +21,7 @@ def load(name: str) -> dict:
 
 class HandoffTest(unittest.TestCase):
     def test_area_bundle_verifies_and_has_snapshot(self):
-        bundle = build_bundle(load("stage5-case-01.json"), "r1", target="r2")
+        bundle = build_bundle(load("stage5-case-01.json"), "r2", target="r2")
         verify_bundle(bundle)
         self.assertEqual(bundle["diagnosis"]["status"], "ospf_area_mismatch")
         self.assertIn("Current configuration", bundle["config_snapshot"]["text"])
@@ -41,13 +41,13 @@ class HandoffTest(unittest.TestCase):
         self.assertIn("hostname r1", peer["config_snapshot"]["text"])
 
     def test_tampering_is_rejected(self):
-        bundle = build_bundle(load("stage5-case-02.json"), "r1")
+        bundle = build_bundle(load("stage5-case-03.json"), "r2", target="r2")
         bundle["diagnosis"]["status"] = "normal"
         with self.assertRaises(HandoffError):
             verify_bundle(bundle)
 
     def test_config_tampering_is_rejected(self):
-        bundle = build_bundle(load("stage5-case-02.json"), "r1")
+        bundle = build_bundle(load("stage5-case-03.json"), "r2", target="r2")
         bundle["config_snapshot"]["text"] += "\n!"
         with self.assertRaises(HandoffError):
             verify_bundle(bundle)
@@ -61,13 +61,26 @@ class HandoffTest(unittest.TestCase):
         self.assertEqual(derive_commands(load("normal.json"), "insufficient_evidence", "r1"), [])
 
     def test_admin_and_passive_plans(self):
-        admin = build_bundle(load("stage5-case-02.json"), "r1", target="r1")
-        self.assertEqual(admin["proposed_commands"], ["no shutdown"])
+        # The admin-down fixture only contains the peer's config; refusing is the safe behavior.
+        with self.assertRaises(HandoffError):
+            build_bundle(load("stage5-case-02.json"), "r1", target="r1")
         passive = build_bundle(load("stage5-case-03.json"), "r2", target="r2")
         self.assertEqual(passive["proposed_commands"], ["no ip ospf passive"])
 
+    def test_missing_target_snapshot_does_not_fall_back_to_peer(self):
+        trace = load("stage5-case-01.json")
+        trace["evidence"] = {key: item for key, item in trace["evidence"].items()
+                             if not (item["tool"] == "query_interface_config"
+                                     and item["arguments"].get("node") == "r2")}
+        with self.assertRaises(HandoffError):
+            build_bundle(trace, "r2", target="r2", commands=[])
+
+    def test_device_name_must_match_snapshot_node(self):
+        with self.assertRaises(HandoffError):
+            build_bundle(load("stage5-case-01.json"), "r1", target="r2", commands=[])
+
     def test_bundle_carries_citations_not_paths(self):
-        bundle = build_bundle(load("stage5-case-01.json"), "r1", target="r2")
+        bundle = build_bundle(load("stage5-case-01.json"), "r2", target="r2")
         self.assertTrue(bundle["citations"])
         serialized = json.dumps(bundle)
         self.assertNotIn(str(LAB_DIR), serialized)

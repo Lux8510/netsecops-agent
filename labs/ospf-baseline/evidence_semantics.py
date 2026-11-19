@@ -37,6 +37,23 @@ def _text(evidence: dict[str, Any]) -> str:
     return "\n".join(str(item.get("stdout") or "") for item in _observations(evidence))
 
 
+def _loopbacks(trace: dict[str, Any]) -> dict[str, str]:
+    """node -> peer loopback address, from a successful query_topology record."""
+    result: dict[str, str] = {}
+    for evidence in (trace.get("evidence") or {}).values():
+        if evidence.get("tool") != "query_topology" or not _successful(evidence):
+            continue
+        nodes = ((evidence.get("data") or {}).get("nodes") or {})
+        for node, info in nodes.items():
+            if not isinstance(info, dict):
+                continue
+            loopback = info.get("loopback_address")
+            peer = info.get("peer")
+            if isinstance(loopback, str) and isinstance(peer, str):
+                result[peer] = loopback
+    return result
+
+
 def _successful(evidence: dict[str, Any]) -> bool:
     if evidence.get("status") != "ok":
         return False
@@ -123,11 +140,12 @@ def collect_facts(trace: dict[str, Any], *, cited_only: bool = True) -> dict[str
                 if interface == interconnect:
                     fact["passive"] = True
         elif tool == "ping_address":
+            target = (evidence.get("arguments") or {}).get("target")
             loss = LOSS.search(text)
-            if loss:
-                fact["ping_results"].append(float(loss.group(1)) == 0.0)
-            elif re.search(r"Network unreachable", text, re.IGNORECASE):
-                fact["ping_results"].append(False)
+            ok = (float(loss.group(1)) == 0.0) if loss else (
+                False if re.search(r"Network unreachable", text, re.IGNORECASE) else None)
+            if ok is not None and isinstance(target, str):
+                fact["ping_results"].append({"node": node, "target": target, "ok": ok})
     return facts
 
 
@@ -170,8 +188,14 @@ def semantic_support(trace: dict[str, Any], claim: str) -> dict[str, Any]:
         check("neighbors_present", len(known_neighbors) == 2
               and all(any(value > 0 for value in values) for values in known_neighbors.values()),
               "neighbor count is zero")
-        ping_values = [value for values in facts["pings"].values() for value in values]
-        check("ping_evidence", len(ping_values) >= 2 and all(ping_values), "ping evidence missing or failing")
+        loopbacks = _loopbacks(trace)
+        pings = {(item["node"], item["target"]): item["ok"]
+                 for values in facts["pings"].values() for item in values}
+        expected_pings = [(node, loopbacks[node]) for node in ("r1", "r2") if node in loopbacks]
+        check("ping_topology_known", len(expected_pings) == 2, "peer loopback addresses unknown")
+        check("ping_both_directions", len(expected_pings) == 2
+              and all(pings.get(pair) is True for pair in expected_pings),
+              "missing or failing ping for one direction")
         check("no_admin_down", not admin, "admin down on " + ",".join(admin))
         check("no_passive", not passive, "passive on " + ",".join(passive))
     elif claim == "ospf_area_mismatch":

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -73,8 +74,25 @@ def variant_summary(name: str, manifest: Path, *, max_tokens: int | None = None,
     }
 
 
+def sample_id(trace: dict[str, Any]) -> str:
+    """Stable identity of the sampled observations, independent of model output."""
+    body = {"task": trace.get("task"), "initial_topology": trace.get("initial_topology"),
+            "evidence": trace.get("evidence")}
+    encoded = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
 def _signature(manifest: Path) -> list[tuple[str, str]]:
-    return [(entry["scenario"], entry["expected"]) for entry in load_manifest(manifest)]
+    runs = []
+    ids = []
+    for entry in load_manifest(manifest):
+        trace = extract_trace(load_json((manifest.parent / entry["trace"]).resolve()))
+        value = sample_id(trace)
+        if value in ids:
+            raise MatrixError(f"Duplicate sample in variant {manifest}: {value}")
+        ids.append(value)
+        runs.append((value, entry["expected"]))
+    return sorted(runs)
 
 
 def compare(variants: dict[str, Path], *, max_tokens: int | None = None,
@@ -84,7 +102,8 @@ def compare(variants: dict[str, Path], *, max_tokens: int | None = None,
     signatures = {name: _signature(path) for name, path in variants.items()}
     base_signature = next(iter(signatures.values()))
     if not allow_unpaired and any(value != base_signature for value in signatures.values()):
-        raise MatrixError("Variants use different scenario/expected sets; pass --allow-unpaired to compare anyway")
+        raise MatrixError("Variants do not share the same sample IDs and expected labels; "
+                          "pass --allow-unpaired to compare anyway")
     results = [variant_summary(name, path, max_tokens=max_tokens, max_seconds=max_seconds)
                for name, path in variants.items()]
     return {"schema_version": 1,

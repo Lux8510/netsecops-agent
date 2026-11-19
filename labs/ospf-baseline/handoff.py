@@ -101,15 +101,10 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
         raise HandoffError("A target node is required to select the config snapshot")
     snapshot = _config_snapshot(trace, target)
     if not snapshot:
-        # The fix target and the node whose config was observed may differ.
-        # The bundle records the actual snapshot node and evidence ID.
-        for node in ("r1", "r2"):
-            if node != target:
-                snapshot = _config_snapshot(trace, node)
-                if snapshot:
-                    break
-    if not snapshot:
-        raise HandoffError(f"Trace has no successful running-config evidence for {target} or its peer")
+        raise HandoffError(f"Trace has no successful running-config evidence for target {target}; "
+                           "refusing to hand off a peer snapshot as the target device")
+    if device != target:
+        raise HandoffError("Device name must match the snapshot target; peer evidence belongs in citations")
     config, evidence_id = snapshot
     snapshot_node = next(
         (record.get("arguments", {}).get("node") for record in (trace.get("evidence") or {}).values()

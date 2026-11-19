@@ -69,6 +69,32 @@ class CompareTest(unittest.TestCase):
             self.assertIsNone(summary["over_budget_rate"])
             self.assertEqual(summary["missing_telemetry_rate"], 1.0)
 
+    def test_same_labels_different_samples_are_not_paired(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = write_variant(root, "first", FIXTURES / "traces/normal.json")
+            second = write_variant(root, "second", FIXTURES / "traces/normal.json")
+            # Same labels, different trace bytes: mutate only a non-evidence field.
+            trace_path = root / "second/trace.json"
+            trace = json.loads(trace_path.read_text(encoding="utf-8"))
+            first_key = next(iter(trace["evidence"]))
+            trace["evidence"][first_key]["data"]["lab"] = "different-sample"
+            trace_path.write_text(json.dumps(trace), encoding="utf-8")
+            from experiment_matrix import MatrixError
+            with self.assertRaises(MatrixError):
+                compare({"first": first, "second": second})
+
+    def test_pairing_ignores_manifest_order(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = write_variant(root, "first", FIXTURES / "traces/normal.json")
+            second = write_variant(root, "second", FIXTURES / "traces/normal.json")
+            for manifest in (first, second):
+                data = json.loads(manifest.read_text(encoding="utf-8"))
+                data["runs"] = list(reversed(data["runs"]))
+                manifest.write_text(json.dumps(data), encoding="utf-8")
+            self.assertTrue(compare({"first": first, "second": second})["paired"])
+
     def test_unpaired_variants_are_rejected_by_default(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
