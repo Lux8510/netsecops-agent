@@ -1,5 +1,10 @@
 # NetSecOps Agent
 
+[![CI](https://github.com/Lux8510/netsecops-agent/actions/workflows/offline.yml/badge.svg)](https://github.com/Lux8510/netsecops-agent/actions/workflows/offline.yml)
+![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB)
+![tests 176](https://img.shields.io/badge/tests-176-3ECF8E)
+![license MIT](https://img.shields.io/badge/license-MIT-green)
+
 **一个"结论必须能追溯到原始命令输出"的只读网络故障诊断 Agent。**
 
 模型可以猜错，但系统不允许它说没有证据的话：每次工具调用都保存原始 stdout/stderr 和运行内 `evidence_id`，确定性校验层再核对根因是否被直接证据支持，不满足就降级为"证据不足"或"采集失败"。
@@ -119,6 +124,7 @@ Containerlab + FRR 实验网
 | --- | --- | --- |
 | 核心 Agent 套件 | 150 项，1 跳过 | 干净临时副本，无 `.env` / 历史运行 |
 | v1 拓扑套件 | 26 项 | 6 节点拓扑意图、授权范围、候选路径 |
+| 离线全量 | **176 项** | `run_offline_tests.py` 一次跑完两套 |
 | 前端 | 7 项 + 类型检查 + 构建 | `npm run check` |
 | 保存轨迹 | 5 份 | 正常、采集失败、缺 Area、区域不一致、管理关闭 |
 
