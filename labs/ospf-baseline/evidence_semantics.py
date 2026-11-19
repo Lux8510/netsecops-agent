@@ -189,13 +189,19 @@ def semantic_support(trace: dict[str, Any], claim: str) -> dict[str, Any]:
               and all(any(value > 0 for value in values) for values in known_neighbors.values()),
               "neighbor count is zero")
         loopbacks = _loopbacks(trace)
-        pings = {(item["node"], item["target"]): item["ok"]
-                 for values in facts["pings"].values() for item in values}
+        pings: dict[tuple[str, str], list[bool]] = {}
+        for values in facts["pings"].values():
+            for item in values:
+                pings.setdefault((item["node"], item["target"]), []).append(bool(item["ok"]))
         expected_pings = [(node, loopbacks[node]) for node in ("r1", "r2") if node in loopbacks]
         check("ping_topology_known", len(expected_pings) == 2, "peer loopback addresses unknown")
+        missing = [pair for pair in expected_pings if not pings.get(pair)]
+        contradictory = [pair for pair in expected_pings if pings.get(pair) and len(set(pings[pair])) > 1]
+        failing = [pair for pair in expected_pings if pings.get(pair) and not any(pings[pair])]
         check("ping_both_directions", len(expected_pings) == 2
-              and all(pings.get(pair) is True for pair in expected_pings),
-              "missing or failing ping for one direction")
+              and not missing and not contradictory and not failing,
+              "contradictory ping results for one direction" if contradictory
+              else "missing or failing ping for one direction")
         check("no_admin_down", not admin, "admin down on " + ",".join(admin))
         check("no_passive", not passive, "passive on " + ",".join(passive))
     elif claim == "ospf_area_mismatch":

@@ -111,6 +111,25 @@ class SemanticTest(unittest.TestCase):
         self.assertFalse(ping_ok("10% packet loss"))
         self.assertFalse(ping_ok("100% packet loss"))
 
+    def test_contradictory_same_direction_ping_is_not_supported(self):
+        import copy
+        for order in ("failure_first", "success_first"):
+            trace = copy.deepcopy(load("normal.json"))
+            e008 = next(key for key, item in trace["evidence"].items()
+                        if item["tool"] == "ping_address" and item["arguments"].get("node") == "r1")
+            failure = copy.deepcopy(trace["evidence"][e008])
+            failure["evidence_id"] = "E-BAD"
+            failure["observations"][0]["stdout"] = failure["observations"][0]["stdout"].replace(
+                "0% packet loss", "10% packet loss")
+            if order == "failure_first":
+                trace["evidence"] = {"E-BAD": failure, **trace["evidence"]}
+            else:
+                trace["evidence"]["E-BAD"] = failure
+            trace["final"]["evidence_ids"] = trace["final"]["evidence_ids"] + ["E-BAD"]
+            result = semantic_support(trace, "normal")
+            self.assertFalse(result["supported"], order)
+            self.assertTrue(any("contradictory ping results" in item for item in result["contradictions"]), order)
+
     def test_duplicate_same_direction_ping_does_not_prove_normal(self):
         import copy
         trace = copy.deepcopy(load("normal.json"))
