@@ -19,7 +19,7 @@ from typing import Any
 from evidence_semantics import _text, collect_facts
 from simulate_fix import PLANNABLE, build_plan
 
-MAX_EXCERPT = 600
+MAX_EXCERPT = 50_000
 
 
 class HandoffError(ValueError):
@@ -67,6 +67,21 @@ def _evidence_items(trace: dict[str, Any], ids: list[str]) -> list[dict[str, Any
     return items
 
 
+def _observation_citation(evidence_id: str, record: dict[str, Any],
+                          observation: dict[str, Any], node: str | None) -> dict[str, Any]:
+    text = str(observation.get("stdout") or "")
+    return {
+        "evidence_id": evidence_id,
+        "tool": record.get("tool"),
+        "arguments": record.get("arguments") or {},
+        "node": node,
+        "command": [str(part) for part in observation.get("command") or []],
+        "exit_code": observation.get("exit_code"),
+        "content_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "excerpt": text[:MAX_EXCERPT],
+    }
+
+
 def _topology_link(trace: dict[str, Any], target: str) -> dict[str, Any]:
     links = (trace.get("initial_topology") or {}).get("link") or []
     local = next((item for item in links if isinstance(item, dict) and item.get("node") == target), None)
@@ -79,8 +94,12 @@ def _topology_link(trace: dict[str, Any], target: str) -> dict[str, Any]:
     }
 
 
-def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, list[str], int] | None:
-    """Pick a successful running-config observation for the requested node."""
+def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, dict[str, Any]] | None:
+    """Pick a successful running-config observation for the requested node.
+
+    Returns (text, evidence_id, observation) where observation is the exact
+    observation that produced the text, so the snapshot citation can be built
+    from that same observation instead of the record's first observation."""
     for evidence_id, record in (trace.get("evidence") or {}).items():
         if record.get("tool") != "query_interface_config" or record.get("status") != "ok":
             continue
@@ -94,7 +113,7 @@ def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, list[s
                 continue
             text = str(observation.get("stdout") or "")
             if "Current configuration" in text:
-                return text, evidence_id, command, int(observation.get("exit_code"))
+                return text, evidence_id, observation
     return None
 
 
@@ -130,19 +149,17 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
                            "refusing to hand off a peer snapshot as the target device")
     if device != target:
         raise HandoffError("Device name must match the snapshot target; peer evidence belongs in citations")
-    config, evidence_id, snapshot_command, snapshot_exit = snapshot
-    snapshot_node = next(
-        (record.get("arguments", {}).get("node") for record in (trace.get("evidence") or {}).values()
-         if record.get("evidence_id") == evidence_id), None)
+    config, evidence_id, snapshot_observation = snapshot
+    snapshot_record = (trace.get("evidence") or {}).get(evidence_id) or {}
+    snapshot_node = (snapshot_record.get("arguments") or {}).get("node")
     if commands is None:
         commands = derive_commands(trace, status, target)
-    # The conclusion cites its own evidence; the snapshot citation is added from the
-    # selected observation independently so imports never depend on the model having
-    # cited the running-config output.
-    cited_ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str)]
-    if evidence_id not in cited_ids:
-        cited_ids = cited_ids + [evidence_id]
-    citations = _evidence_items(trace, cited_ids)
+    # The conclusion cites its own evidence; the snapshot citation is built from the
+    # exact observation that produced the snapshot, independently of the model's
+    # citations and of the record's first observation.
+    snapshot_citation = _observation_citation(evidence_id, snapshot_record, snapshot_observation, snapshot_node)
+    cited_ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str) and item != evidence_id]
+    citations = [snapshot_citation] + _evidence_items(trace, cited_ids)
     if commands:
         # Reuse the fixed simulation allowlist; no arbitrary commands in a handoff.
         from simulate_fix import COMMAND
@@ -165,8 +182,8 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
             "node": snapshot_node,
             "target": target,
             "evidence_id": evidence_id,
-            "command": snapshot_command,
-            "exit_code": snapshot_exit,
+            "command": [str(part) for part in snapshot_observation.get("command") or []],
+            "exit_code": snapshot_observation.get("exit_code"),
             "text": config,
             "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest(),
         },

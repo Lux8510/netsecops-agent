@@ -114,3 +114,25 @@ class TraceIdentityTest(unittest.TestCase):
             self.assertIn("content_sha256", item)
             self.assertIn("command", item)
             self.assertIn("exit_code", item)
+
+
+class SnapshotCitationOrderingTest(unittest.TestCase):
+    def test_snapshot_citation_uses_the_selected_observation_not_the_first(self):
+        import copy
+        trace = copy.deepcopy(load("stage5-case-01.json"))
+        # Find the r2 running-config record and reorder so a different observation is first.
+        for evidence_id, record in trace["evidence"].items():
+            if record.get("tool") == "query_interface_config" and record.get("arguments", {}).get("node") == "r2":
+                running = record["observations"][0]
+                other = dict(running)
+                other["command"] = ["vtysh", "-c", "show interface eth1"]
+                other["exit_code"] = 0
+                other["stdout"] = "eth1 is up\n"
+                record["observations"] = [other, running]
+        bundle = build_bundle(trace, "r2", target="r2")
+        snapshot = bundle["config_snapshot"]
+        snapshot_citation = next(item for item in bundle["citations"]
+                                 if item["evidence_id"] == snapshot["evidence_id"])
+        self.assertTrue(any("show running-config" in str(p) for p in snapshot_citation["command"]))
+        self.assertEqual(snapshot_citation["exit_code"], 0)
+        self.assertEqual(snapshot_citation["content_sha256"], snapshot["sha256"])
