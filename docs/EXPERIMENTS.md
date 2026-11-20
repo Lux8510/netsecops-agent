@@ -161,14 +161,14 @@ python labs/ospf-baseline/ab_compare.py \
 python labs/ospf-baseline/handoff.py --trace trace.json --device r2 --target r2 --out handoff.json
 ```
 
-证据包包含：诊断结论、引用证据、配置快照与 SHA-256、固定修复命令、bundle 哈希。  
+证据包（schema v2）包含：诊断结论、稳定 `trace_id`、引用证据（含节点/命令/退出码/内容摘要）、配置快照（含来源节点/采集命令/退出码/SHA-256）、固定修复建议与 bundle 哈希。  
 在 netcfg-evidence 侧：
 
 ```bash
-python scripts/import_diagnosis.py --bundle handoff.json --username 何深
+python scripts/import_diagnosis.py --bundle handoff.json --username 何深 --device-id <uuid>
 ```
 
-netcfg 会校验哈希、重新导入配置、**用自己的规则复算**，只把变更单关联到它自己产生的 Finding；外部结论只写入 rationale，不改变判定。
+netcfg 在一个事务里校验哈希与快照身份、重新导入配置、**用自己的规则复算**，只对适用的本地 violated Finding 建草稿；外部建议命令存入导入记录，不进入草稿；同 bundle 或同 trace 重复导入返回原记录。外部结论只写入理由，不改变判定。
 
 ---
 

@@ -30,6 +30,15 @@ def canonical(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def trace_identity(trace: dict[str, Any]) -> str:
+    """Stable identity of the sampled observations, independent of the export
+    timestamp and the model's conclusion. Re-exporting the same trace yields the
+    same id, so netcfg can deduplicate a re-imported diagnosis."""
+    body = {"task": trace.get("task"), "initial_topology": trace.get("initial_topology"),
+            "evidence": trace.get("evidence")}
+    return hashlib.sha256(canonical(body)).hexdigest()
+
+
 def _evidence_items(trace: dict[str, Any]) -> list[dict[str, Any]]:
     final = trace.get("final") or {}
     ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str)]
@@ -42,6 +51,7 @@ def _evidence_items(trace: dict[str, Any]) -> list[dict[str, Any]]:
         observations = [item for item in record.get("observations") or [] if isinstance(item, dict)]
         first = observations[0] if observations else {}
         node = (record.get("arguments") or {}).get("node")
+        full = _text(record)
         items.append({
             "evidence_id": evidence_id,
             "tool": record.get("tool"),
@@ -49,12 +59,13 @@ def _evidence_items(trace: dict[str, Any]) -> list[dict[str, Any]]:
             "node": node,
             "command": first.get("command") or [],
             "exit_code": first.get("exit_code"),
-            "excerpt": _text(record)[:MAX_EXCERPT],
+            "content_sha256": hashlib.sha256(full.encode("utf-8")).hexdigest(),
+            "excerpt": full[:MAX_EXCERPT],
         })
     return items
 
 
-def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str] | None:
+def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, list[str], int] | None:
     """Pick a successful running-config observation for the requested node."""
     for evidence_id, record in (trace.get("evidence") or {}).items():
         if record.get("tool") != "query_interface_config" or record.get("status") != "ok":
@@ -69,7 +80,7 @@ def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str] | None
                 continue
             text = str(observation.get("stdout") or "")
             if "Current configuration" in text:
-                return text, evidence_id
+                return text, evidence_id, command, int(observation.get("exit_code"))
     return None
 
 
@@ -105,7 +116,7 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
                            "refusing to hand off a peer snapshot as the target device")
     if device != target:
         raise HandoffError("Device name must match the snapshot target; peer evidence belongs in citations")
-    config, evidence_id = snapshot
+    config, evidence_id, snapshot_command, snapshot_exit = snapshot
     snapshot_node = next(
         (record.get("arguments", {}).get("node") for record in (trace.get("evidence") or {}).values()
          if record.get("evidence_id") == evidence_id), None)
@@ -118,8 +129,9 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
             if not COMMAND.match(command):
                 raise HandoffError(f"Command is not allowlisted: {command!r}")
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "netsecops-agent",
+        "trace_id": trace_identity(trace),
         "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "device": {"name": device},
         "diagnosis": {
@@ -128,8 +140,15 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
             "repair_suggestion": final.get("repair_suggestion"),
             "evidence_ids": final.get("evidence_ids") or [],
         },
-        "config_snapshot": {"node": snapshot_node, "target": target, "evidence_id": evidence_id, "text": config,
-                            "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest()},
+        "config_snapshot": {
+            "node": snapshot_node,
+            "target": target,
+            "evidence_id": evidence_id,
+            "command": snapshot_command,
+            "exit_code": snapshot_exit,
+            "text": config,
+            "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest(),
+        },
         "proposed_commands": commands,
         "citations": _evidence_items(trace),
         "lab_only": True,
@@ -141,16 +160,30 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
 def verify_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(bundle, dict) or bundle.get("source") != "netsecops-agent":
         raise HandoffError("Bundle source is not netsecops-agent")
-    if bundle.get("schema_version") != 1:
+    if bundle.get("schema_version") != 2:
         raise HandoffError("Unsupported bundle schema version")
     expected = bundle.get("bundle_sha256")
     body = {key: value for key, value in bundle.items() if key != "bundle_sha256"}
     actual = hashlib.sha256(canonical(body)).hexdigest()
     if expected != actual:
         raise HandoffError("Bundle hash does not match its contents")
-    config = (bundle.get("config_snapshot") or {}).get("text") or ""
-    if hashlib.sha256(config.encode("utf-8")).hexdigest() != (bundle.get("config_snapshot") or {}).get("sha256"):
+    snapshot = bundle.get("config_snapshot") or {}
+    if not isinstance(bundle.get("trace_id"), str) or len(bundle.get("trace_id")) != 64:
+        raise HandoffError("Bundle has no valid trace_id")
+    config = snapshot.get("text") or ""
+    if hashlib.sha256(config.encode("utf-8")).hexdigest() != snapshot.get("sha256"):
         raise HandoffError("Config snapshot hash does not match")
+    if not isinstance(snapshot.get("node"), str) or not isinstance(snapshot.get("target"), str):
+        raise HandoffError("Snapshot must bind node and target")
+    if snapshot.get("node") != snapshot.get("target"):
+        raise HandoffError("Snapshot node and target differ")
+    if not isinstance(snapshot.get("evidence_id"), str) or not snapshot["evidence_id"]:
+        raise HandoffError("Snapshot has no evidence_id")
+    command = snapshot.get("command")
+    if not isinstance(command, list) or not any("show running-config" in str(part) for part in command):
+        raise HandoffError("Snapshot command is not a running-config collection")
+    if snapshot.get("exit_code") != 0:
+        raise HandoffError("Snapshot command did not succeed")
     return bundle
 
 

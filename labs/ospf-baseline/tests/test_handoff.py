@@ -88,3 +88,29 @@ class HandoffTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TraceIdentityTest(unittest.TestCase):
+    def test_trace_id_is_stable_across_reexports(self):
+        from handoff import trace_identity
+        trace = load("stage5-case-01.json")
+        first = trace_identity(trace)
+        second = trace_identity(load("stage5-case-01.json"))
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 64)
+
+    def test_snapshot_carries_observation_identity(self):
+        bundle = build_bundle(load("stage5-case-01.json"), "r2", target="r2")
+        snapshot = bundle["config_snapshot"]
+        self.assertEqual(snapshot["node"], "r2")
+        self.assertEqual(snapshot["target"], "r2")
+        self.assertEqual(snapshot["exit_code"], 0)
+        self.assertTrue(any("show running-config" in part for part in snapshot["command"]))
+        self.assertTrue(snapshot["evidence_id"])
+
+    def test_citations_carry_digests(self):
+        bundle = build_bundle(load("stage5-case-01.json"), "r2", target="r2")
+        for item in bundle["citations"]:
+            self.assertIn("content_sha256", item)
+            self.assertIn("command", item)
+            self.assertIn("exit_code", item)
