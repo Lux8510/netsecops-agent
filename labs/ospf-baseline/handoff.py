@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Export a diagnosis as a self-contained handoff bundle for netcfg-evidence.
 
-The bundle carries the conclusion, cited evidence, the config snapshot and
-(optionally) a fixed remediation plan. It contains no credentials or host paths
-from the operator workstation, and the bundle hash covers the canonical JSON.
+The bundle carries the conclusion, cited observations, the target and peer
+config snapshots and the link the diagnosis refers to. Every observation keeps
+the stored stdout/stderr, a truncation marker and a digest computed over that
+exact stored content, so the receiver can recompute it instead of trusting an
+excerpt. The bundle hash covers the canonical JSON.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from typing import Any
 from evidence_semantics import _text, collect_facts
 from simulate_fix import PLANNABLE, build_plan
 
-MAX_EXCERPT = 50_000
+MAX_STREAM_BYTES = 50_000
 
 
 class HandoffError(ValueError):
@@ -32,17 +34,60 @@ def canonical(payload: dict[str, Any]) -> bytes:
 
 def trace_identity(trace: dict[str, Any]) -> str:
     """Stable identity of the sampled observations, independent of the export
-    timestamp and the model's conclusion. Re-exporting the same trace yields the
-    same id, so netcfg can deduplicate a re-imported diagnosis."""
+    timestamp and the model's conclusion."""
     body = {"task": trace.get("task"), "initial_topology": trace.get("initial_topology"),
             "evidence": trace.get("evidence")}
     return hashlib.sha256(canonical(body)).hexdigest()
 
 
-def _evidence_items(trace: dict[str, Any], ids: list[str]) -> list[dict[str, Any]]:
+def _bounded(text: str, limit: int = MAX_STREAM_BYTES) -> tuple[str, bool, int]:
+    encoded = text.encode("utf-8")
+    if len(encoded) <= limit:
+        return text, False, len(encoded)
+    return encoded[:limit].decode("utf-8", "ignore"), True, len(encoded)
+
+
+def _observation_payload(observation: dict[str, Any], *, full: bool = False) -> dict[str, Any]:
+    raw_stdout = str(observation.get("stdout") or "")
+    raw_stderr = str(observation.get("stderr") or "")
+    if full:
+        stdout, stdout_truncated, stdout_bytes = raw_stdout, False, len(raw_stdout.encode("utf-8"))
+    else:
+        stdout, stdout_truncated, stdout_bytes = _bounded(raw_stdout)
+    stderr, stderr_truncated, stderr_bytes = _bounded(raw_stderr)
+    return {
+        "node": observation.get("node"),
+        "command": [str(part) for part in observation.get("command") or []],
+        "exit_code": observation.get("exit_code"),
+        "stdout": stdout,
+        "stderr": stderr,
+        "stdout_truncated": stdout_truncated,
+        "stderr_truncated": stderr_truncated,
+        "stdout_bytes": stdout_bytes,
+        "stderr_bytes": stderr_bytes,
+    }
+
+
+def observation_digest(observations: list[dict[str, Any]]) -> str:
+    return hashlib.sha256(canonical(observations)).hexdigest()
+
+
+def _citation(evidence_id: str, record: dict[str, Any],
+              observations: list[dict[str, Any]], node: str | None) -> dict[str, Any]:
+    return {
+        "evidence_id": evidence_id,
+        "tool": record.get("tool"),
+        "arguments": record.get("arguments") or {},
+        "node": node,
+        "observations": observations,
+        "content_sha256": observation_digest(observations),
+    }
+
+
+def _evidence_items(trace: dict[str, Any], ids: list[str], skip: set[str]) -> list[dict[str, Any]]:
     evidence = trace.get("evidence") or {}
     items = []
-    seen: set[str] = set()
+    seen: set[str] = set(skip)
     for evidence_id in ids:
         if not isinstance(evidence_id, str) or not evidence_id or evidence_id in seen:
             continue
@@ -50,56 +95,15 @@ def _evidence_items(trace: dict[str, Any], ids: list[str]) -> list[dict[str, Any
         if not isinstance(record, dict):
             continue
         seen.add(evidence_id)
-        observations = [item for item in record.get("observations") or [] if isinstance(item, dict)]
-        first = observations[0] if observations else {}
+        observations = [_observation_payload(item) for item in record.get("observations") or []
+                        if isinstance(item, dict)]
         node = (record.get("arguments") or {}).get("node")
-        full = _text(record)
-        items.append({
-            "evidence_id": evidence_id,
-            "tool": record.get("tool"),
-            "arguments": record.get("arguments") or {},
-            "node": node,
-            "command": first.get("command") or [],
-            "exit_code": first.get("exit_code"),
-            "content_sha256": hashlib.sha256(full.encode("utf-8")).hexdigest(),
-            "excerpt": full[:MAX_EXCERPT],
-        })
+        items.append(_citation(evidence_id, record, observations, node))
     return items
 
 
-def _observation_citation(evidence_id: str, record: dict[str, Any],
-                          observation: dict[str, Any], node: str | None) -> dict[str, Any]:
-    text = str(observation.get("stdout") or "")
-    return {
-        "evidence_id": evidence_id,
-        "tool": record.get("tool"),
-        "arguments": record.get("arguments") or {},
-        "node": node,
-        "command": [str(part) for part in observation.get("command") or []],
-        "exit_code": observation.get("exit_code"),
-        "content_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-        "excerpt": text[:MAX_EXCERPT],
-    }
-
-
-def _topology_link(trace: dict[str, Any], target: str) -> dict[str, Any]:
-    links = (trace.get("initial_topology") or {}).get("link") or []
-    local = next((item for item in links if isinstance(item, dict) and item.get("node") == target), None)
-    peer = next((item for item in links if isinstance(item, dict) and item.get("node") != target), None)
-    return {
-        "node": target,
-        "interface": (local or {}).get("interface"),
-        "peer": (peer or {}).get("node"),
-        "peer_interface": (peer or {}).get("interface"),
-    }
-
-
 def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, dict[str, Any]] | None:
-    """Pick a successful running-config observation for the requested node.
-
-    Returns (text, evidence_id, observation) where observation is the exact
-    observation that produced the text, so the snapshot citation can be built
-    from that same observation instead of the record's first observation."""
+    """Pick a successful running-config observation for the requested node."""
     for evidence_id, record in (trace.get("evidence") or {}).items():
         if record.get("tool") != "query_interface_config" or record.get("status") != "ok":
             continue
@@ -115,6 +119,23 @@ def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, dict[s
             if "Current configuration" in text:
                 return text, evidence_id, observation
     return None
+
+
+def _observation_citation(evidence_id: str, record: dict[str, Any],
+                          observation: dict[str, Any], node: str | None) -> dict[str, Any]:
+    return _citation(evidence_id, record, [_observation_payload(observation, full=True)], node)
+
+
+def _topology_link(trace: dict[str, Any], target: str) -> dict[str, Any]:
+    links = (trace.get("initial_topology") or {}).get("link") or []
+    local = next((item for item in links if isinstance(item, dict) and item.get("node") == target), None)
+    peer = next((item for item in links if isinstance(item, dict) and item.get("node") != target), None)
+    return {
+        "node": target,
+        "interface": (local or {}).get("interface"),
+        "peer": (peer or {}).get("node"),
+        "peer_interface": (peer or {}).get("interface"),
+    }
 
 
 def derive_commands(trace: dict[str, Any], status: str, target: str | None) -> list[str]:
@@ -143,31 +164,52 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
                                   if isinstance(item.get("node"), str)]), None)
     if not target:
         raise HandoffError("A target node is required to select the config snapshot")
+    if device != target:
+        raise HandoffError("Device name must match the snapshot target; peer evidence belongs in citations")
     snapshot = _config_snapshot(trace, target)
     if not snapshot:
         raise HandoffError(f"Trace has no successful running-config evidence for target {target}; "
                            "refusing to hand off a peer snapshot as the target device")
-    if device != target:
-        raise HandoffError("Device name must match the snapshot target; peer evidence belongs in citations")
     config, evidence_id, snapshot_observation = snapshot
     snapshot_record = (trace.get("evidence") or {}).get(evidence_id) or {}
     snapshot_node = (snapshot_record.get("arguments") or {}).get("node")
     if commands is None:
         commands = derive_commands(trace, status, target)
-    # The conclusion cites its own evidence; the snapshot citation is built from the
-    # exact observation that produced the snapshot, independently of the model's
-    # citations and of the record's first observation.
-    snapshot_citation = _observation_citation(evidence_id, snapshot_record, snapshot_observation, snapshot_node)
-    cited_ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str) and item != evidence_id]
-    citations = [snapshot_citation] + _evidence_items(trace, cited_ids)
     if commands:
-        # Reuse the fixed simulation allowlist; no arbitrary commands in a handoff.
         from simulate_fix import COMMAND
         for command in commands:
             if not COMMAND.match(command):
                 raise HandoffError(f"Command is not allowlisted: {command!r}")
+
+    link = _topology_link(trace, target)
+    citations = [_observation_citation(evidence_id, snapshot_record, snapshot_observation, snapshot_node)]
+    skip = {evidence_id}
+
+    peer_snapshot = None
+    peer_node = link.get("peer")
+    if isinstance(peer_node, str) and peer_node:
+        peer_pick = _config_snapshot(trace, peer_node)
+        if peer_pick:
+            peer_text, peer_evidence_id, peer_observation = peer_pick
+            peer_record = (trace.get("evidence") or {}).get(peer_evidence_id) or {}
+            citations.append(_observation_citation(peer_evidence_id, peer_record, peer_observation,
+                                                   (peer_record.get("arguments") or {}).get("node")))
+            skip.add(peer_evidence_id)
+            peer_snapshot = {
+                "node": peer_node,
+                "interface": link.get("peer_interface"),
+                "evidence_id": peer_evidence_id,
+                "command": [str(part) for part in peer_observation.get("command") or []],
+                "exit_code": peer_observation.get("exit_code"),
+                "text": peer_text,
+                "sha256": hashlib.sha256(peer_text.encode("utf-8")).hexdigest(),
+            }
+
+    cited_ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str)]
+    citations.extend(_evidence_items(trace, cited_ids, skip))
+
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "source": "netsecops-agent",
         "trace_id": trace_identity(trace),
         "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -187,42 +229,65 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
             "text": config,
             "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest(),
         },
+        "peer_snapshot": peer_snapshot,
         "proposed_commands": commands,
         "citations": citations,
-        "link": _topology_link(trace, target),
+        "link": link,
         "lab_only": True,
     }
     payload["bundle_sha256"] = hashlib.sha256(canonical(payload)).hexdigest()
     return payload
 
 
+def _check_observation_digests(citations: list[dict[str, Any]]) -> None:
+    seen: set[str] = set()
+    for item in citations:
+        evidence_id = item.get("evidence_id")
+        if not isinstance(evidence_id, str) or not evidence_id:
+            raise HandoffError("citation has no evidence_id")
+        if evidence_id in seen:
+            raise HandoffError(f"duplicate citation evidence_id: {evidence_id}")
+        seen.add(evidence_id)
+        observations = item.get("observations")
+        if not isinstance(observations, list) or not observations:
+            raise HandoffError(f"citation {evidence_id} has no observations")
+        if observation_digest(observations) != item.get("content_sha256"):
+            raise HandoffError(f"citation {evidence_id} digest does not match its observations")
+
+
 def verify_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(bundle, dict) or bundle.get("source") != "netsecops-agent":
         raise HandoffError("Bundle source is not netsecops-agent")
-    if bundle.get("schema_version") != 2:
+    if bundle.get("schema_version") != 3:
         raise HandoffError("Unsupported bundle schema version")
     expected = bundle.get("bundle_sha256")
     body = {key: value for key, value in bundle.items() if key != "bundle_sha256"}
-    actual = hashlib.sha256(canonical(body)).hexdigest()
-    if expected != actual:
+    if expected != hashlib.sha256(canonical(body)).hexdigest():
         raise HandoffError("Bundle hash does not match its contents")
-    snapshot = bundle.get("config_snapshot") or {}
-    if not isinstance(bundle.get("trace_id"), str) or len(bundle.get("trace_id")) != 64:
+    if not isinstance(bundle.get("trace_id"), str) or len(bundle["trace_id"]) != 64:
         raise HandoffError("Bundle has no valid trace_id")
+
+    snapshot = bundle.get("config_snapshot") or {}
+    if snapshot.get("node") != snapshot.get("target"):
+        raise HandoffError("Snapshot node and target differ")
     config = snapshot.get("text") or ""
     if hashlib.sha256(config.encode("utf-8")).hexdigest() != snapshot.get("sha256"):
         raise HandoffError("Config snapshot hash does not match")
-    if not isinstance(snapshot.get("node"), str) or not isinstance(snapshot.get("target"), str):
-        raise HandoffError("Snapshot must bind node and target")
-    if snapshot.get("node") != snapshot.get("target"):
-        raise HandoffError("Snapshot node and target differ")
-    if not isinstance(snapshot.get("evidence_id"), str) or not snapshot["evidence_id"]:
-        raise HandoffError("Snapshot has no evidence_id")
-    command = snapshot.get("command")
-    if not isinstance(command, list) or not any("show running-config" in str(part) for part in command):
-        raise HandoffError("Snapshot command is not a running-config collection")
     if snapshot.get("exit_code") != 0:
         raise HandoffError("Snapshot command did not succeed")
+    if not any("show running-config" in str(part) for part in snapshot.get("command") or []):
+        raise HandoffError("Snapshot command is not a running-config collection")
+
+    peer = bundle.get("peer_snapshot")
+    if peer is not None:
+        if peer.get("node") != (bundle.get("link") or {}).get("peer"):
+            raise HandoffError("Peer snapshot node does not match the link")
+        if hashlib.sha256((peer.get("text") or "").encode("utf-8")).hexdigest() != peer.get("sha256"):
+            raise HandoffError("Peer snapshot hash does not match")
+        if peer.get("exit_code") != 0:
+            raise HandoffError("Peer snapshot command did not succeed")
+
+    _check_observation_digests(bundle.get("citations") or [])
     return bundle
 
 

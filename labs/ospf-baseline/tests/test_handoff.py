@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -112,8 +113,9 @@ class TraceIdentityTest(unittest.TestCase):
         bundle = build_bundle(load("stage5-case-01.json"), "r2", target="r2")
         for item in bundle["citations"]:
             self.assertIn("content_sha256", item)
-            self.assertIn("command", item)
-            self.assertIn("exit_code", item)
+            self.assertTrue(item["observations"])
+            self.assertIn("stdout", item["observations"][0])
+            self.assertIn("exit_code", item["observations"][0])
 
 
 class SnapshotCitationOrderingTest(unittest.TestCase):
@@ -133,6 +135,26 @@ class SnapshotCitationOrderingTest(unittest.TestCase):
         snapshot = bundle["config_snapshot"]
         snapshot_citation = next(item for item in bundle["citations"]
                                  if item["evidence_id"] == snapshot["evidence_id"])
-        self.assertTrue(any("show running-config" in str(p) for p in snapshot_citation["command"]))
-        self.assertEqual(snapshot_citation["exit_code"], 0)
-        self.assertEqual(snapshot_citation["content_sha256"], snapshot["sha256"])
+        observation = snapshot_citation["observations"][0]
+        self.assertTrue(any("show running-config" in str(p) for p in observation["command"]))
+        self.assertEqual(observation["exit_code"], 0)
+        self.assertEqual(hashlib.sha256(observation["stdout"].encode()).hexdigest(), snapshot["sha256"])
+
+
+class PeerSnapshotTest(unittest.TestCase):
+    def test_area_trace_exports_peer_snapshot(self):
+        bundle = build_bundle(load("stage5-case-01.json"), "r2", target="r2")
+        peer = bundle["peer_snapshot"]
+        self.assertIsNotNone(peer)
+        self.assertEqual(peer["node"], "r1")
+        self.assertEqual(peer["interface"], "eth1")
+        self.assertIn("hostname r1", peer["text"])
+        self.assertEqual(hashlib.sha256(peer["text"].encode()).hexdigest(), peer["sha256"])
+
+    def test_missing_peer_snapshot_is_null_not_invented(self):
+        trace = load("stage5-case-01.json")
+        trace["evidence"] = {key: item for key, item in trace["evidence"].items()
+                             if not (item["tool"] == "query_interface_config"
+                                     and item["arguments"].get("node") == "r1")}
+        bundle = build_bundle(trace, "r2", target="r2")
+        self.assertIsNone(bundle["peer_snapshot"])

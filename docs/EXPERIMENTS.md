@@ -161,7 +161,7 @@ python labs/ospf-baseline/ab_compare.py \
 python labs/ospf-baseline/handoff.py --trace trace.json --device r2 --target r2 --out handoff.json
 ```
 
-证据包（schema v2）包含：诊断结论、稳定 `trace_id`、引用证据（含节点/命令/退出码/内容摘要）、配置快照（含来源节点/采集命令/退出码/SHA-256）、固定修复建议与 bundle 哈希。  
+证据包（schema v3）包含：诊断结论、稳定 `trace_id`、每条引用的观测（stdout/stderr/截断标记/内容摘要）、目标与对端配置快照、所指链路、固定修复建议与 bundle 哈希。  
 在 netcfg-evidence 侧：
 
 ```bash
@@ -189,4 +189,4 @@ netcfg 在一个事务里校验哈希与快照身份、重新导入配置、**�
 | 真实模拟修复 | **未在本机执行**（无 Docker） |
 
 离线测试证明的是“流程与安全约束正确”，不是“现场实验成功”。  
-如果要写进简历或文档，请分别写清楚“离线 176 项测试（核心 150 + 拓扑 26）”和“现场矩阵未执行”。
+如果要写进简历或文档，请分别写清楚“离线 182 项测试（核心 156 + 拓扑 26）”和“现场矩阵未执行”。
