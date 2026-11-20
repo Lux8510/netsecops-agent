@@ -39,15 +39,17 @@ def trace_identity(trace: dict[str, Any]) -> str:
     return hashlib.sha256(canonical(body)).hexdigest()
 
 
-def _evidence_items(trace: dict[str, Any]) -> list[dict[str, Any]]:
-    final = trace.get("final") or {}
-    ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str)]
+def _evidence_items(trace: dict[str, Any], ids: list[str]) -> list[dict[str, Any]]:
     evidence = trace.get("evidence") or {}
     items = []
+    seen: set[str] = set()
     for evidence_id in ids:
+        if not isinstance(evidence_id, str) or not evidence_id or evidence_id in seen:
+            continue
         record = evidence.get(evidence_id)
         if not isinstance(record, dict):
             continue
+        seen.add(evidence_id)
         observations = [item for item in record.get("observations") or [] if isinstance(item, dict)]
         first = observations[0] if observations else {}
         node = (record.get("arguments") or {}).get("node")
@@ -63,6 +65,18 @@ def _evidence_items(trace: dict[str, Any]) -> list[dict[str, Any]]:
             "excerpt": full[:MAX_EXCERPT],
         })
     return items
+
+
+def _topology_link(trace: dict[str, Any], target: str) -> dict[str, Any]:
+    links = (trace.get("initial_topology") or {}).get("link") or []
+    local = next((item for item in links if isinstance(item, dict) and item.get("node") == target), None)
+    peer = next((item for item in links if isinstance(item, dict) and item.get("node") != target), None)
+    return {
+        "node": target,
+        "interface": (local or {}).get("interface"),
+        "peer": (peer or {}).get("node"),
+        "peer_interface": (peer or {}).get("interface"),
+    }
 
 
 def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, list[str], int] | None:
@@ -122,6 +136,13 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
          if record.get("evidence_id") == evidence_id), None)
     if commands is None:
         commands = derive_commands(trace, status, target)
+    # The conclusion cites its own evidence; the snapshot citation is added from the
+    # selected observation independently so imports never depend on the model having
+    # cited the running-config output.
+    cited_ids = [item for item in final.get("evidence_ids") or [] if isinstance(item, str)]
+    if evidence_id not in cited_ids:
+        cited_ids = cited_ids + [evidence_id]
+    citations = _evidence_items(trace, cited_ids)
     if commands:
         # Reuse the fixed simulation allowlist; no arbitrary commands in a handoff.
         from simulate_fix import COMMAND
@@ -150,7 +171,8 @@ def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = Non
             "sha256": hashlib.sha256(config.encode("utf-8")).hexdigest(),
         },
         "proposed_commands": commands,
-        "citations": _evidence_items(trace),
+        "citations": citations,
+        "link": _topology_link(trace, target),
         "lab_only": True,
     }
     payload["bundle_sha256"] = hashlib.sha256(canonical(payload)).hexdigest()
