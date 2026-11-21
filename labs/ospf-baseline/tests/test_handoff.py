@@ -182,3 +182,14 @@ class TruncationTest(unittest.TestCase):
         observation = citation["observations"][0]
         self.assertTrue(observation["stdout_truncated"])
         self.assertEqual(observation["stdout_bytes"], 12345)
+
+
+class NormalSavedTraceTest(unittest.TestCase):
+    def test_normal_saved_trace_exports_with_target_snapshot(self):
+        document = json.loads((FIXTURES / "v04-failures/normal-trace.json").read_text(encoding="utf-8"))
+        trace = document.get("trace") if isinstance(document.get("trace"), dict) else document
+        bundle = build_bundle(trace, "r1", target="r1")
+        verify_bundle(bundle)
+        self.assertEqual(bundle["diagnosis"]["status"], "normal")
+        self.assertEqual(bundle["config_snapshot"]["node"], "r1")
+        self.assertEqual(bundle["proposed_commands"], [])
