@@ -50,11 +50,24 @@ def _bounded(text: str, limit: int = MAX_STREAM_BYTES) -> tuple[str, bool, int]:
 def _observation_payload(observation: dict[str, Any], *, full: bool = False) -> dict[str, Any]:
     raw_stdout = str(observation.get("stdout") or "")
     raw_stderr = str(observation.get("stderr") or "")
+    upstream_stdout_truncated = bool(observation.get("stdout_truncated"))
+    upstream_stdout_bytes = observation.get("stdout_bytes")
     if full:
         stdout, stdout_truncated, stdout_bytes = raw_stdout, False, len(raw_stdout.encode("utf-8"))
+    elif upstream_stdout_truncated:
+        stdout = raw_stdout
+        stdout_truncated = True
+        stdout_bytes = int(upstream_stdout_bytes or len(raw_stdout.encode("utf-8")))
     else:
         stdout, stdout_truncated, stdout_bytes = _bounded(raw_stdout)
-    stderr, stderr_truncated, stderr_bytes = _bounded(raw_stderr)
+    upstream_stderr_truncated = bool(observation.get("stderr_truncated"))
+    upstream_stderr_bytes = observation.get("stderr_bytes")
+    if upstream_stderr_truncated:
+        stderr = raw_stderr
+        stderr_truncated = True
+        stderr_bytes = int(upstream_stderr_bytes or len(raw_stderr.encode("utf-8")))
+    else:
+        stderr, stderr_truncated, stderr_bytes = _bounded(raw_stderr)
     return {
         "node": observation.get("node"),
         "command": [str(part) for part in observation.get("command") or []],
@@ -112,10 +125,15 @@ def _config_snapshot(trace: dict[str, Any], node: str) -> tuple[str, str, dict[s
         for observation in record.get("observations") or []:
             if observation.get("exit_code") != 0:
                 continue
+            if observation.get("stdout_truncated"):
+                continue
+            stdout_bytes = observation.get("stdout_bytes")
             command = [str(part) for part in observation.get("command") or []]
             if not any("show running-config" in part for part in command):
                 continue
             text = str(observation.get("stdout") or "")
+            if isinstance(stdout_bytes, int) and stdout_bytes != len(text.encode("utf-8")):
+                continue
             if "Current configuration" in text:
                 return text, evidence_id, observation
     return None

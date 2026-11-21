@@ -158,3 +158,27 @@ class PeerSnapshotTest(unittest.TestCase):
                                      and item["arguments"].get("node") == "r1")}
         bundle = build_bundle(trace, "r2", target="r2")
         self.assertIsNone(bundle["peer_snapshot"])
+
+
+class TruncationTest(unittest.TestCase):
+    def test_truncated_snapshot_is_rejected(self):
+        trace = load("stage5-case-01.json")
+        for record in trace["evidence"].values():
+            if record.get("tool") == "query_interface_config" and record.get("arguments", {}).get("node") == "r2":
+                record["observations"][0]["stdout_truncated"] = True
+                record["observations"][0]["stdout_bytes"] = len(record["observations"][0]["stdout"].encode()) + 100
+        with self.assertRaises(HandoffError):
+            build_bundle(trace, "r2", target="r2")
+
+    def test_upstream_truncation_is_preserved_in_other_citations(self):
+        trace = load("stage5-case-01.json")
+        for record in trace["evidence"].values():
+            if record.get("tool") == "query_neighbors":
+                record["observations"][0]["stdout_truncated"] = True
+                record["observations"][0]["stdout_bytes"] = 12345
+                break
+        bundle = build_bundle(trace, "r2", target="r2")
+        citation = next(item for item in bundle["citations"] if item["tool"] == "query_neighbors")
+        observation = citation["observations"][0]
+        self.assertTrue(observation["stdout_truncated"])
+        self.assertEqual(observation["stdout_bytes"], 12345)
