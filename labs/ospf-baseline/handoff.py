@@ -164,12 +164,17 @@ def derive_commands(trace: dict[str, Any], status: str, target: str | None) -> l
     iface = next((item.get("interface") for item in interface if item.get("node") == target), None)
     if not iface:
         return []
-    if status == "ospf_area_mismatch":
-        peer = "r2" if target == "r1" else "r1"
-        current = (facts.get(target) or {}).get("area")
-        peer_area = (facts.get(peer) or {}).get("area")
-        return list(build_plan(status, target, iface, current_area=current, peer_area=peer_area).commands)
-    return list(build_plan(status, target, iface).commands)
+    try:
+        if status == "ospf_area_mismatch":
+            peer = "r2" if target == "r1" else "r1"
+            current = (facts.get(target) or {}).get("area")
+            peer_area = (facts.get(peer) or {}).get("area")
+            return list(build_plan(status, target, iface, current_area=current, peer_area=peer_area).commands)
+        return list(build_plan(status, target, iface).commands)
+    except ValueError:
+        # A trace built only from running-config observations has no OSPF facts;
+        # the external command suggestion is optional, the snapshots are the contract.
+        return []
 
 
 def build_bundle(trace: dict[str, Any], device: str, *, target: str | None = None,
@@ -309,17 +314,27 @@ def verify_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     return bundle
 
 
+def require_peer_snapshot(bundle: dict[str, Any]) -> None:
+    if (bundle.get("diagnosis") or {}).get("status") == "ospf_area_mismatch" and not bundle.get("peer_snapshot"):
+        raise HandoffError("Area mismatch handoff has no peer snapshot; refusing to export "
+                           "a draft that cannot bind both sides")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trace", type=Path, required=True)
     parser.add_argument("--device", required=True)
     parser.add_argument("--target", choices=("r1", "r2"))
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--require-peer", action="store_true",
+                        help="Refuse an Area-mismatch bundle without a peer snapshot")
     args = parser.parse_args(argv)
     try:
         document = json.loads(args.trace.read_text(encoding="utf-8"))
         trace = document.get("trace") if isinstance(document.get("trace"), dict) else document
         bundle = build_bundle(trace, args.device, target=args.target)
+        if args.require_peer:
+            require_peer_snapshot(bundle)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(bundle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, HandoffError, ValueError) as exc:
