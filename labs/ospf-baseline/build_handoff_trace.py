@@ -32,7 +32,13 @@ def _node_config(document: dict[str, Any], node: str) -> tuple[dict[str, Any], s
             continue
         if item.get("exit_code") != 0:
             continue
-        if "Current configuration" not in str(item.get("stdout") or ""):
+        text = str(item.get("stdout") or "")
+        if item.get("stdout_truncated"):
+            continue
+        declared = item.get("stdout_bytes")
+        if isinstance(declared, int) and declared != len(text.encode("utf-8")):
+            continue
+        if "Current configuration" not in text:
             continue
         return item, command
     return None
@@ -73,6 +79,12 @@ def build_trace(document: dict[str, Any], target: str) -> dict[str, Any]:
                 "ended_at_utc": item.get("ended_at_utc"),
                 "stdout": item.get("stdout"),
                 "stderr": item.get("stderr") or "",
+                "stdout_truncated": bool(item.get("stdout_truncated")),
+                "stderr_truncated": bool(item.get("stderr_truncated")),
+                "stdout_bytes": item.get("stdout_bytes") if isinstance(item.get("stdout_bytes"), int)
+                else len(str(item.get("stdout") or "").encode("utf-8")),
+                "stderr_bytes": item.get("stderr_bytes") if isinstance(item.get("stderr_bytes"), int)
+                else len(str(item.get("stderr") or "").encode("utf-8")),
                 "error": item.get("error"),
             }],
             "error": None,

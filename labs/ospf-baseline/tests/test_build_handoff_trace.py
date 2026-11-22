@@ -57,3 +57,44 @@ class TraceBuildTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SnapshotIntegrityTest(unittest.TestCase):
+    def _mutation(self, node: str, **changes) -> dict:
+        document = copy.deepcopy(load("stage5-case-01.json"))
+        for item in document["nodes"][node]["commands"]:
+            if item["id"] == "running_config":
+                item.update(changes)
+                return document
+        raise AssertionError("running_config missing")
+
+    def test_truncated_target_is_rejected(self):
+        document = self._mutation("r2", stdout_truncated=True)
+        trace = build_trace(document, "r2")
+        with self.assertRaises(HandoffError):
+            build_bundle(trace, "r2", target="r2")
+
+    def test_truncated_peer_cannot_enter_double_snapshot_path(self):
+        document = self._mutation("r1", stdout_truncated=True)
+        trace = build_trace(document, "r2")
+        bundle = build_bundle(trace, "r2", target="r2")
+        self.assertIsNone(bundle["peer_snapshot"])
+        with self.assertRaises(HandoffError):
+            require_peer_snapshot(bundle, expected_status="ospf_area_mismatch")
+
+    def test_peer_stdout_bytes_mismatch_is_rejected(self):
+        text = next(item["stdout"] for item in load("stage5-case-01.json")["nodes"]["r1"]["commands"]
+                    if item["id"] == "running_config")
+        document = self._mutation("r1", stdout_bytes=len(text.encode("utf-8")) + 1)
+        trace = build_trace(document, "r2")
+        self.assertIsNone(build_bundle(trace, "r2", target="r2")["peer_snapshot"])
+
+    def test_missing_peer_config_degrades_status_and_stops_area_handoff(self):
+        document = copy.deepcopy(load("stage5-case-01.json"))
+        document["nodes"]["r1"]["commands"] = [
+            item for item in document["nodes"]["r1"]["commands"] if item["id"] != "running_config"]
+        trace = build_trace(document, "r2")
+        self.assertEqual(trace["final"]["status"], "insufficient_evidence")
+        bundle = build_bundle(trace, "r2", target="r2", commands=[])
+        with self.assertRaises(HandoffError):
+            require_peer_snapshot(bundle, expected_status="ospf_area_mismatch")

@@ -314,10 +314,14 @@ def verify_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     return bundle
 
 
-def require_peer_snapshot(bundle: dict[str, Any]) -> None:
-    if (bundle.get("diagnosis") or {}).get("status") == "ospf_area_mismatch" and not bundle.get("peer_snapshot"):
-        raise HandoffError("Area mismatch handoff has no peer snapshot; refusing to export "
-                           "a draft that cannot bind both sides")
+def require_peer_snapshot(bundle: dict[str, Any], expected_status: str | None = None) -> None:
+    peer = bundle.get("peer_snapshot")
+    if not isinstance(peer, dict) or not peer.get("text"):
+        raise HandoffError("handoff has no complete peer snapshot; refusing to export")
+    status = (bundle.get("diagnosis") or {}).get("status")
+    if expected_status is not None and status != expected_status:
+        raise HandoffError(f"diagnosis status {status!r} does not match expected {expected_status!r}; "
+                           "refusing to hand off")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -327,14 +331,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", choices=("r1", "r2"))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--require-peer", action="store_true",
-                        help="Refuse an Area-mismatch bundle without a peer snapshot")
+                        help="Require a complete peer snapshot (both ends)")
+    parser.add_argument("--expect-status", default=None,
+                        help="Refuse unless the diagnosis status equals this value")
     args = parser.parse_args(argv)
     try:
         document = json.loads(args.trace.read_text(encoding="utf-8"))
         trace = document.get("trace") if isinstance(document.get("trace"), dict) else document
         bundle = build_bundle(trace, args.device, target=args.target)
         if args.require_peer:
-            require_peer_snapshot(bundle)
+            require_peer_snapshot(bundle, expected_status=args.expect_status)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(bundle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, HandoffError, ValueError) as exc:
